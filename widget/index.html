@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VinaCaptcha Multi-Challenge Interactive Playground</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #64748b;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 30px 20px;
+        line-height: 1.5;
+      }
+      .container { max-width: 1000px; margin: 0 auto; }
+      .header { text-align: center; margin-bottom: 30px; }
+      .header h1 { font-size: 26px; font-weight: 700; color: #1e293b; display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .header p { color: var(--text-muted); font-size: 14px; margin-top: 6px; }
+      
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+      }
+      .card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+
+      /* Form controls */
+      .form-group { margin-bottom: 14px; }
+      label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500; color: #334155; }
+      input[type="text"], input[type="email"], input[type="password"], select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      input:focus, select:focus { border-color: var(--primary); }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 10px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+      }
+      .btn-primary { background: var(--primary); color: #fff; }
+      .btn-primary:hover { background: var(--primary-hover); }
+      .btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+      .btn-secondary:hover { background: #e2e8f0; }
+
+      .btn-group { display: flex; flex-direction: column; gap: 10px; }
+      .btn-test {
+        padding: 12px 14px;
+        font-size: 13px;
+        text-align: left;
+        justify-content: flex-start;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #1e293b;
+      }
+      .btn-test:hover { border-color: var(--primary); background: #eff6ff; }
+      .btn-test .icon { font-size: 18px; }
+      .btn-test .info { display: flex; flex-direction: column; }
+      .btn-test .title { font-weight: 600; }
+      .btn-test .desc { font-size: 11px; color: var(--text-muted); font-weight: normal; }
+
+      /* Metrics Box */
+      .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+      .metric-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
+      .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+      .metric-value { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+
+      /* Debug Console */
+      .console {
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 12px;
+        border-radius: 8px;
+        padding: 14px;
+        height: 250px;
+        overflow-y: auto;
+        margin-top: 20px;
+      }
+      .log-entry { margin-bottom: 4px; line-height: 1.4; }
+      .log-time { color: #64748b; margin-right: 6px; }
+      .log-success { color: #4ade80; }
+      .log-error { color: #f87171; }
+      .log-info { color: #38bdf8; }
+      .log-warn { color: #facc15; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🛡️ VinaCaptcha Multi-Challenge Test Bench</h1>
+        <p>Kiểm thử trực quan cả 3 cơ chế: <strong>Invisible (v3)</strong>, <strong>Slider Puzzle (Kéo ghép hình)</strong> và <strong>Proof-of-Work (PoW Web Crypto)</strong></p>
+      </div>
+
+      <div class="grid">
+        <!-- Cột 1: Form Đăng nhập Tích hợp Widget -->
+        <div class="card">
+          <div class="card-title">📝 Form Tích Hợp (Mặc Định / Sản Phẩm Thật)</div>
+          <form id="demo-form" action="/fake-login" method="POST">
+            <div class="form-group">
+              <label>Tài khoản Email</label>
+              <input type="email" name="email" value="user@domain.vn" required />
+            </div>
+            <div class="form-group">
+              <label>Mật khẩu</label>
+              <input type="password" name="password" value="Password@123" required />
+            </div>
+            <div class="form-group">
+              <label>Chế độ ép buộc (Dành cho thử nghiệm)</label>
+              <select id="select-force-mode">
+                <option value="">🤖 Tự động theo Risk Engine (Mặc định)</option>
+                <option value="none">🟢 Chế độ 1: Invisible Pass (Tàng hình)</option>
+                <option value="slider">🧩 Chế độ 2: Slider Puzzle (Kéo ghép hình)</option>
+                <option value="pow">⚡ Chế độ 3: Proof-of-Work (Giải mã ngầm)</option>
+              </select>
+            </div>
+            
+            <!-- Container cho VinaCaptcha Widget -->
+            <div id="vinacaptcha-container" style="margin-bottom: 16px;"></div>
+
+            <button type="submit" class="btn btn-primary" id="btn-submit" style="margin-bottom: 10px;">
+              <span>🚀</span> Xác thực & Đăng nhập
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-reset">
+              <span>🔄</span> Reset Trạng Thái
+            </button>
+          </form>
+        </div>
+
+        <!-- Cột 2: Bảng Điều Khiển Test Trực Tiếp Từng Thử Thách -->
+        <div class="card">
+          <div class="card-title">⚡ Kiểm Thử Từng Thử Thách (On-Demand Trigger)</div>
+          
+          <div class="btn-group">
+            <button class="btn btn-test" id="test-slider-btn">
+              <span class="icon">🧩</span>
+              <div class="info">
+                <span class="title">1. Kích hoạt Slider Puzzle Mode</span>
+                <span class="desc">Bật popup ghép hình Canvas, hỗ trợ chuột và cảm ứng touch</span>
+              </div>
+            </button>
+
+            <button class="btn btn-test" id="test-pow-btn">
+              <span class="icon">⚡</span>
+              <div class="info">
+                <span class="title">2. Kích hoạt Proof-of-Work (PoW) Mode</span>
+                <span class="desc">Chạy Web Crypto SHA-256 tìm Nonce ngầm không chặn UI</span>
+              </div>
+            </button>
+
+            <button class="btn btn-test" id="test-none-btn">
+              <span class="icon">🟢</span>
+              <div class="info">
+                <span class="title">3. Kích hoạt Invisible Pass Mode</span>
+                <span class="desc">Xác thực tàng hình tức thì khi Risk Score thấp</span>
+              </div>
+            </button>
+          </div>
+
+          <!-- Chỉ số kết quả realtime -->
+          <div class="metrics-grid">
+            <div class="metric-box">
+              <div class="metric-label">Loại Thử Thách</div>
+              <div class="metric-value" id="metric-challenge">-</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Thời Gian Xử Lý</div>
+              <div class="metric-value" id="metric-duration">-</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Risk Score</div>
+              <div class="metric-value" id="metric-score">-</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Kết Quả</div>
+              <div class="metric-value" id="metric-result" style="color: #22c55e;">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Debug Console Log -->
+      <div class="console" id="debug-panel">
+        <div style="color: #94a3b8; margin-bottom: 8px; font-weight: bold; border-bottom: 1px solid #334155; padding-bottom: 4px;">
+          🖥️ VinaCaptcha Realtime Debug Stream:
+        </div>
+      </div>
+    </div>
+
+    <!-- Nạp script Widget -->
+    <script type="module" src="/src/main.ts"></script>
+    
+    <!-- Script điều khiển Demo -->
+    <script type="module">
+      const debugPanel = document.getElementById('debug-panel');
+      const addLog = (msg, type = 'info') => {
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        const colorClass = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : 'log-info';
+        div.innerHTML = `<span class="log-time">[${new Date().toLocaleTimeString()}]</span> <span class="${colorClass}">${msg}</span>`;
+        debugPanel.appendChild(div);
+        debugPanel.scrollTop = debugPanel.scrollHeight;
+      };
+
+      const updateMetrics = (challenge, duration, score, result, isPass = true) => {
+        document.getElementById('metric-challenge').textContent = challenge.toUpperCase();
+        document.getElementById('metric-duration').textContent = `${duration}ms`;
+        document.getElementById('metric-score').textContent = `${score}/100`;
+        const resEl = document.getElementById('metric-result');
+        resEl.textContent = result;
+        resEl.style.color = isPass ? '#22c55e' : '#ef4444';
+      };
+
+      window.onload = () => {
+        addLog('Đang khởi tạo VinaCaptcha Widget Core...', 'info');
+
+        // Ghi đè hàm submit gốc của form
+        const demoForm = document.getElementById('demo-form');
+        demoForm.submit = function() {
+          const token = document.getElementById('vina_captcha_token')?.value;
+          if (token) {
+            addLog(`🚀 Form đã nhận Token hợp lệ: ${token.substring(0, 24)}...`, 'success');
+            alert(`✅ Đăng nhập thành công!\n\nToken VinaCaptcha:\n${token}`);
+          } else {
+            addLog('❌ Form được gọi submit() nhưng không có Token!', 'error');
+          }
+        };
+
+        // Khởi tạo VinaCaptcha
+        window.captchaInstance = new window.VinaCaptcha('vinacaptcha-container', {
+          siteKey: 'cap_live_demo_123456',
+          baseUrl: 'http://localhost:3068',
+          debug: true,
+          onSuccess: (token, score) => {
+            addLog(`✅ Xác thực thành công! Token: ${token.substring(0, 20)}... (Score: ${score})`, 'success');
+          },
+          onError: (err) => {
+            addLog(`❌ Xác thực thất bại: ${err.message || err}`, 'error');
+          }
+        });
+
+        addLog('✓ VinaCaptcha sẵn sàng đón nhận thử thách.', 'success');
+
+        // Bắt sự kiện đổi chế độ ép buộc trên dropdown
+        const selectMode = document.getElementById('select-force-mode');
+        selectMode.addEventListener('change', (e) => {
+          const mode = e.target.value;
+          window.captchaInstance.config.forceChallenge = mode || undefined;
+          addLog(`🔧 Đã chuyển chế độ ép buộc sang: ${mode ? mode.toUpperCase() : 'AUTO (Risk Engine)'}`, 'warn');
+        });
+
+        // Nút Reset
+        document.getElementById('btn-reset').addEventListener('click', () => {
+          window.captchaInstance.reset();
+          addLog('🔄 Đã reset trạng thái captcha về ban đầu.', 'info');
+        });
+
+        // ─── Direct Test Triggers ───
+
+        // Test 1: Slider Puzzle
+        document.getElementById('test-slider-btn').addEventListener('click', async () => {
+          addLog('👉 [TEST] Kích hoạt Slider Puzzle Mode...', 'warn');
+          const res = await window.captchaInstance.execute({ forceChallenge: 'slider' });
+          if (res.success) {
+            addLog(`✅ [Slider Passed] Token: ${res.verify_token.substring(0, 20)}... (${res.duration_ms}ms)`, 'success');
+            updateMetrics('slider', res.duration_ms, res.score, 'PASS', true);
+          } else {
+            addLog(`❌ [Slider Failed] Lý do: ${res.reason}`, 'error');
+            updateMetrics('slider', res.duration_ms, res.score || 0, 'FAIL', false);
+          }
+        });
+
+        // Test 2: PoW
+        document.getElementById('test-pow-btn').addEventListener('click', async () => {
+          addLog('👉 [TEST] Kích hoạt Proof-of-Work (PoW Web Crypto) Mode...', 'warn');
+          const res = await window.captchaInstance.execute({ forceChallenge: 'pow' });
+          if (res.success) {
+            addLog(`✅ [PoW Passed] Đã giải Nonce thành công! Token: ${res.verify_token.substring(0, 20)}... (${res.duration_ms}ms)`, 'success');
+            updateMetrics('pow', res.duration_ms, res.score, 'PASS', true);
+          } else {
+            addLog(`❌ [PoW Failed] Lý do: ${res.reason}`, 'error');
+            updateMetrics('pow', res.duration_ms, res.score || 0, 'FAIL', false);
+          }
+        });
+
+        // Test 3: Invisible
+        document.getElementById('test-none-btn').addEventListener('click', async () => {
+          addLog('👉 [TEST] Kích hoạt Invisible Mode...', 'warn');
+          const res = await window.captchaInstance.execute({ forceChallenge: 'none' });
+          if (res.success) {
+            addLog(`✅ [Invisible Passed] Token: ${res.verify_token.substring(0, 20)}... (${res.duration_ms}ms)`, 'success');
+            updateMetrics('none', res.duration_ms, res.score, 'PASS', true);
+          } else {
+            addLog(`❌ [Invisible Failed] Lý do: ${res.reason}`, 'error');
+            updateMetrics('none', res.duration_ms, res.score || 0, 'FAIL', false);
+          }
+        });
+      };
+    </script>
+  </body>
+</html>
+
