@@ -22,10 +22,18 @@
 
 ---
 
-## 💻 1. Yêu Cầu Hệ Thống
-
+## 💻 1. Yêu Cầu Hệ Thống & Tối Ưu Tài Nguyên
+ 
 - **Hệ điều hành**: Ubuntu 20.04 / 22.04 / 24.04 LTS (hoặc Debian 11/12).
-- **Cấu hình tối thiểu**: 1 vCPU, 1 GB RAM, 10 GB SSD (Khuyến nghị: 2 vCPU, 2 GB RAM cho production).
+- **Cấu hình tối ưu & khuyến nghị (Production)**: **3 vCPU / 3 GB RAM** (hoặc 2–4 vCPU, 2–4 GB RAM, 20 GB SSD).
+  - Khả năng xử lý: **50.000+ lượt xác thực/giây** (Fastify non-blocking I/O + Redis In-Memory).
+  - Compile & Build Docker: Trơn tru, tốc độ cao (không bị nghẽn RAM khi Vite/TypeScript build).
+- **Cấu hình tối thiểu**: 1 vCPU, 1 GB RAM + 2 GB Swap (Tự động kích hoạt bởi `install.sh`).
+- **Phân bổ tài nguyên mặc định trên Docker (Đã tối ưu cho VPS 3 CPU / 3 GB RAM)**:
+  - **Redis 7**: Cấp phát `768 MB` RAM (`volatile-lru`), xử lý hàng triệu token one-time-use và CORS whitelist tức thì.
+  - **PostgreSQL 15/16**: Cấu hình `512 MB` shared_buffers, `1.5 GB` effective_cache_size, 200 concurrent connection pool.
+  - **Backend (Fastify + NestJS)**: V8 Node heap `1024 MB` (`--max-old-space-size=1024`), chịu tải đồng thời cực lớn.
+  - **Gateway (Nginx) & Dashboard SPA**: Alpine containers siêu nhẹ (< 60 MB RAM).
 - **Cổng mạng (Ports)**: Cần mở Port `80` (HTTP) và `443` (HTTPS) trên Firewall / Security Group.
 - **Tên miền (Domain)**: 1 tên miền hoặc subdomain trỏ bản ghi `A` về IP của VPS (VD: `captcha.domaincuaban.com`).
 

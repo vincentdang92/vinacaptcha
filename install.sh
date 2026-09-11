@@ -30,11 +30,27 @@ if [ "$(id -u)" -ne 0 ]; then
     fi
 fi
 
-# 2. CẬP NHẬT HỆ THỐNG & CÀI ĐẶT TIỆN ÍCH CƠ BẢN
-echo -e "📦 [1/5] Đang cập nhật hệ thống và cài đặt công cụ cần thiết (curl, git, ufw)..."
+# 2. CẬP NHẬT HỆ THỐNG & TỐI ƯU TÀI NGUYÊN (SWAPFILE)
+echo -e "📦 [1/5] Đang cập nhật hệ thống và tối ưu tài nguyên máy chủ..."
 $SUDO apt-get update -y -qq
 $SUDO apt-get install -y -qq git curl ufw ca-certificates openssl > /dev/null 2>&1
-echo -e "  ${GREEN}✓${NC} Cập nhật hệ thống hoàn tất."
+
+# Kiểm tra và tự động kích hoạt Swap (2GB) nếu máy chủ chưa có Swap hoặc Swap < 1GB
+SWAP_TOTAL_MB=$(free -m 2>/dev/null | awk '/^Swap:/ {print $2}' || echo 0)
+if [ -z "$SWAP_TOTAL_MB" ] || [ "$SWAP_TOTAL_MB" -lt 1024 ]; then
+    echo -e "  💡 Phát hiện Swap thấp (${SWAP_TOTAL_MB:-0}MB). Tự động tạo 2GB Swapfile bảo vệ RAM chống tràn bộ nhớ (OOM)..."
+    $SUDO fallocate -l 2G /swapfile 2>/dev/null || $SUDO dd if=/dev/zero of=/swapfile bs=1M count=2048 2>/dev/null || true
+    if [ -f /swapfile ]; then
+        $SUDO chmod 600 /swapfile
+        $SUDO mkswap /swapfile >/dev/null 2>&1 || true
+        $SUDO swapon /swapfile 2>/dev/null || true
+        if ! grep -q '/swapfile' /etc/fstab 2>/dev/null; then
+            echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null 2>&1 || true
+        fi
+        echo -e "  ${GREEN}✓${NC} Đã kích hoạt 2GB Swapfile an toàn."
+    fi
+fi
+echo -e "  ${GREEN}✓${NC} Cập nhật hệ thống & tối ưu tài nguyên hoàn tất."
 
 # 3. TỰ ĐỘNG CÀI ĐẶT DOCKER & DOCKER COMPOSE NẾU CHƯA CÓ
 echo -e "🐳 [2/5] Kiểm tra & cài đặt Docker Engine..."

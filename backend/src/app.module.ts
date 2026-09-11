@@ -32,6 +32,11 @@ import { JobsModule } from './jobs/jobs.module.js';
         database: configService.get<string>('DB_NAME') || configService.get<string>('BACKEND_DATABASE_NAME') || 'captcha_db',
         autoLoadEntities: true,
         synchronize: false,
+        extra: {
+          max: 30,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        },
       }),
     }),
     ThreatIntelModule,

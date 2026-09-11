@@ -55,7 +55,7 @@ else
     echo -e "  ${GREEN}✓${NC} CPU Cores: ${GREEN}$CPU_CORES core(s)${NC} (Tối thiểu: $MIN_CPU_CORES)"
 fi
 
-# 1.3. Kiểm tra RAM (Tối thiểu 1GB = ~950MB thực tế)
+# 1.3. Kiểm tra RAM & Swap (Tối thiểu 1GB, Tối ưu 3GB+)
 MIN_RAM_MB=950
 if [ -f /proc/meminfo ]; then
     TOTAL_RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
@@ -64,7 +64,18 @@ else
     TOTAL_RAM_MB=1024
 fi
 
-if [ "$TOTAL_RAM_MB" -lt "$MIN_RAM_MB" ]; then
+SWAP_TOTAL_MB=$(free -m 2>/dev/null | awk '/^Swap:/ {print $2}' || echo 0)
+
+if [ "$TOTAL_RAM_MB" -ge 2800 ]; then
+    echo -e "  ${GREEN}✓${NC} Bộ nhớ RAM: ${GREEN}${TOTAL_RAM_MB} MB (Tier 3GB+ Khuyến Nghị / Hiệu Năng Cao)${NC} | Swap: ${SWAP_TOTAL_MB} MB"
+elif [ "$TOTAL_RAM_MB" -ge 1800 ]; then
+    echo -e "  ${GREEN}✓${NC} Bộ nhớ RAM: ${GREEN}${TOTAL_RAM_MB} MB (Tier 2GB Chuẩn)${NC} | Swap: ${SWAP_TOTAL_MB} MB"
+elif [ "$TOTAL_RAM_MB" -ge "$MIN_RAM_MB" ]; then
+    echo -e "  ${YELLOW}✓${NC} Bộ nhớ RAM: ${YELLOW}${TOTAL_RAM_MB} MB (Tier Tối Thiểu 1GB)${NC} | Swap: ${SWAP_TOTAL_MB} MB"
+    if [ "$SWAP_TOTAL_MB" -lt 1024 ]; then
+        echo -e "  ${YELLOW}⚠️ Khuyến nghị: VPS 1GB RAM nên bật ít nhất 2GB Swap để tránh nghẽn khi Docker compile mã nguồn.${NC}"
+    fi
+else
     echo -e "  ${RED}❌ RAM: ${TOTAL_RAM_MB}MB (Yêu cầu tối thiểu: 1024MB / 1GB)${NC}"
     echo -e "  ${YELLOW}⚠️ Lưu ý: Máy chủ thiếu RAM có thể gây lỗi OOM (Out Of Memory) khi build/chạy.${NC}"
     read -p "Bạn có muốn tiếp tục ép buộc chạy không? (y/N): " FORCE_RAM
@@ -72,8 +83,6 @@ if [ "$TOTAL_RAM_MB" -lt "$MIN_RAM_MB" ]; then
         echo -e "${RED}Đã hủy triển khai.${NC}"
         exit 1
     fi
-else
-    echo -e "  ${GREEN}✓${NC} Bộ nhớ RAM: ${GREEN}${TOTAL_RAM_MB} MB${NC} (Tối thiểu: 1GB)"
 fi
 
 # 1.4. Kiểm tra Dung lượng ổ cứng trống (Tối thiểu 3GB = 3072MB)

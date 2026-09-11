@@ -4,6 +4,20 @@ services:
     image: postgres:15-alpine
     container_name: captcha_postgres
     restart: unless-stopped
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=128MB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c max_connections=200
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-captcha_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-captcha_password}
@@ -26,7 +40,7 @@ services:
     image: redis:7-alpine
     container_name: captcha_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy volatile-lru
+    command: redis-server --appendonly yes --maxmemory 768mb --maxmemory-policy volatile-lru
     volumes:
       - redis_data:/data
     ports:
@@ -49,6 +63,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      NODE_OPTIONS: "--max-old-space-size=1024"
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${POSTGRES_USER:-captcha_user}
