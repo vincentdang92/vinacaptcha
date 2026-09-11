@@ -15,7 +15,8 @@ import {
   Divider, 
   message, 
   Spin, 
-  Tooltip 
+  Tooltip,
+  theme
 } from 'antd';
 import { 
   MailOutlined, 
@@ -132,6 +133,7 @@ const PRESET_CONFIGS: Record<string, {
 };
 
 export const SmtpSettingsPage: React.FC = () => {
+  const { token } = theme.useToken();
   const [status, setStatus] = useState<SmtpStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -142,8 +144,8 @@ export const SmtpSettingsPage: React.FC = () => {
   const [testEmail, setTestEmail] = useState('');
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('vinacaptcha_token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    const authToken = localStorage.getItem('vinacaptcha_token');
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
   };
 
   const fetchStatus = async () => {
@@ -292,7 +294,7 @@ export const SmtpSettingsPage: React.FC = () => {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <MailOutlined style={{ fontSize: 28, color: '#7367f0' }} />
+          <MailOutlined style={{ fontSize: 28, color: token.colorPrimary }} />
           <div>
             <Title level={3} style={{ margin: 0 }}>Cấu Hình Cổng Email SMTP</Title>
             <Text type="secondary">
@@ -332,10 +334,15 @@ export const SmtpSettingsPage: React.FC = () => {
       {/* Preset Fast Selector */}
       <Card
         size="small"
-        style={{ marginBottom: 24, background: '#f8fafc', borderColor: '#e2e8f0' }}
+        style={{ 
+          marginBottom: 24, 
+          background: token.colorBgContainer, 
+          borderColor: token.colorBorderSecondary,
+          borderRadius: token.borderRadiusLG,
+        }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-            <ThunderboltOutlined style={{ color: '#ff9f43' }} />
+            <ThunderboltOutlined style={{ color: token.colorWarning }} />
             <Text strong>Chọn Nhanh Mẫu Nhà Cung Cấp Mail Phổ Biến:</Text>
           </div>
         }
@@ -353,9 +360,10 @@ export const SmtpSettingsPage: React.FC = () => {
                     height: 'auto',
                     padding: '8px 10px',
                     textAlign: 'left',
-                    borderRadius: 8,
-                    background: isSelected ? '#7367f0' : '#ffffff',
-                    borderColor: isSelected ? '#7367f0' : '#e2e8f0',
+                    borderRadius: token.borderRadius,
+                    background: isSelected ? token.colorPrimary : token.colorBgContainer,
+                    borderColor: isSelected ? token.colorPrimary : token.colorBorderSecondary,
+                    color: isSelected ? '#ffffff' : token.colorText,
                   }}
                 >
                   <div style={{ fontWeight: 600, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -364,7 +372,11 @@ export const SmtpSettingsPage: React.FC = () => {
                       {item.name.split('(')[0]}
                     </span>
                   </div>
-                  <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>
+                  <div style={{ 
+                    fontSize: 11, 
+                    color: isSelected ? 'rgba(255,255,255,0.85)' : token.colorTextSecondary, 
+                    marginTop: 2 
+                  }}>
                     Port {item.port} {item.secure ? 'SSL' : 'TLS'}
                   </div>
                 </Button>
@@ -373,7 +385,15 @@ export const SmtpSettingsPage: React.FC = () => {
           })}
         </Row>
         {selectedPreset !== 'custom' && PRESET_CONFIGS[selectedPreset] && (
-          <div style={{ marginTop: 12, padding: '8px 12px', background: '#eff6ff', borderRadius: 6, fontSize: 12, color: '#1e40af' }}>
+          <div style={{ 
+            marginTop: 12, 
+            padding: '10px 14px', 
+            background: token.colorInfoBg, 
+            border: `1px solid ${token.colorInfoBorder}`,
+            borderRadius: token.borderRadius, 
+            fontSize: 12, 
+            color: token.colorText 
+          }}>
             💡 <strong>Gợi ý:</strong> {PRESET_CONFIGS[selectedPreset].hint}
           </div>
         )}
@@ -397,12 +417,12 @@ export const SmtpSettingsPage: React.FC = () => {
             <Card
               title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <CloudServerOutlined style={{ color: '#7367f0' }} />
+                  <CloudServerOutlined style={{ color: token.colorPrimary }} />
                   <Text style={{ fontWeight: 600 }}>Thông Số Máy Chủ SMTP</Text>
                 </div>
               }
               variant="borderless"
-              style={{ height: '100%' }}
+              style={{ height: '100%', borderRadius: token.borderRadiusLG }}
             >
               <Row gutter={16}>
                 <Col span={16}>
@@ -411,7 +431,7 @@ export const SmtpSettingsPage: React.FC = () => {
                       <span>
                         Máy Chủ SMTP (Host){' '}
                         <Tooltip title="Địa chỉ máy chủ gửi thư, ví dụ: mail.nhanhoa.com, smtp.gmail.com">
-                          <QuestionCircleOutlined style={{ color: '#94a3b8' }} />
+                          <QuestionCircleOutlined style={{ color: token.colorTextTertiary }} />
                         </Tooltip>
                       </span>
                     }
@@ -455,7 +475,7 @@ export const SmtpSettingsPage: React.FC = () => {
                 </Col>
               </Row>
 
-              <Divider style={{ margin: '16px 0' }} />
+              <Divider style={{ margin: '16px 0', borderColor: token.colorBorderSecondary }} />
 
               <Form.Item
                 label="Tên Người Gửi Hiển Thị (From Name)"
@@ -470,7 +490,7 @@ export const SmtpSettingsPage: React.FC = () => {
                   <span>
                     Địa Chỉ Email Người Gửi (From Email){' '}
                     <Tooltip title="Địa chỉ email xuất hiện tại trường From trong hòm thư người nhận">
-                      <QuestionCircleOutlined style={{ color: '#94a3b8' }} />
+                      <QuestionCircleOutlined style={{ color: token.colorTextTertiary }} />
                     </Tooltip>
                   </span>
                 }
@@ -487,12 +507,12 @@ export const SmtpSettingsPage: React.FC = () => {
             <Card
               title={
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <KeyOutlined style={{ color: '#28c76f' }} />
+                  <KeyOutlined style={{ color: token.colorSuccess }} />
                   <Text style={{ fontWeight: 600 }}>Tài Khoản Xác Thực & Thử Nghiệm</Text>
                 </div>
               }
               variant="borderless"
-              style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+              style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRadius: token.borderRadiusLG }}
             >
               <div>
                 <Form.Item
@@ -502,7 +522,7 @@ export const SmtpSettingsPage: React.FC = () => {
                   <Input 
                     placeholder="VD: user@yourdomain.com hoặc apikey" 
                     size="large" 
-                    prefix={<MailOutlined style={{ color: '#94a3b8' }} />}
+                    prefix={<MailOutlined style={{ color: token.colorTextTertiary }} />}
                   />
                 </Form.Item>
 
@@ -527,9 +547,15 @@ export const SmtpSettingsPage: React.FC = () => {
                 </Form.Item>
 
                 {/* Sub-Card: Realtime Test Email Box */}
-                <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, padding: 16, marginTop: 16 }}>
+                <div style={{ 
+                  background: token.colorBgLayout, 
+                  border: `1px dashed ${token.colorBorder}`, 
+                  borderRadius: token.borderRadiusLG, 
+                  padding: 16, 
+                  marginTop: 16 
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                    <SendOutlined style={{ color: '#7367f0' }} />
+                    <SendOutlined style={{ color: token.colorPrimary }} />
                     <Text strong style={{ fontSize: 13 }}>Gửi Email Kiểm Tra Kết Nối Trực Tiếp:</Text>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -539,14 +565,14 @@ export const SmtpSettingsPage: React.FC = () => {
                       onChange={(e) => setTestEmail(e.target.value)}
                       size="middle"
                       style={{ flex: 1 }}
-                      prefix={<MailOutlined style={{ color: '#94a3b8' }} />}
+                      prefix={<MailOutlined style={{ color: token.colorTextTertiary }} />}
                     />
                     <Button
                       type="default"
                       icon={<SendOutlined />}
                       loading={testing}
                       onClick={handleTestConnection}
-                      style={{ borderColor: '#7367f0', color: '#7367f0' }}
+                      style={{ borderColor: token.colorPrimary, color: token.colorPrimary }}
                     >
                       {testing ? 'Đang gửi...' : 'Gửi Thử'}
                     </Button>
@@ -580,7 +606,7 @@ export const SmtpSettingsPage: React.FC = () => {
                   icon={<SaveOutlined />}
                   size="large"
                   loading={saving}
-                  style={{ background: '#7367f0', borderColor: '#7367f0', minWidth: 200 }}
+                  style={{ background: token.colorPrimary, borderColor: token.colorPrimary, minWidth: 200 }}
                 >
                   {saving ? 'Đang lưu vào CSDL...' : 'Lưu Cấu Hình (Database)'}
                 </Button>
@@ -596,11 +622,12 @@ export const SmtpSettingsPage: React.FC = () => {
           <Card 
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <InfoCircleOutlined style={{ color: '#00cfe8' }} />
+                <InfoCircleOutlined style={{ color: token.colorInfo }} />
                 <Text style={{ fontWeight: 600 }}>Tài Liệu Hướng Dẫn Lấy Mật Khẩu / API Key Từng Nhà Cung Cấp</Text>
               </div>
             }
             variant="borderless"
+            style={{ borderRadius: token.borderRadiusLG }}
           >
             <Tabs 
               defaultActiveKey="nhanhoa"
@@ -613,7 +640,7 @@ export const SmtpSettingsPage: React.FC = () => {
                       <Paragraph>
                         Để cấu hình email gửi qua dịch vụ Email Doanh Nghiệp tại Nhân Hòa:
                       </Paragraph>
-                      <ul style={{ paddingLeft: 20, color: '#334155', lineHeight: 1.8 }}>
+                      <ul style={{ paddingLeft: 20, color: token.colorText, lineHeight: 1.8 }}>
                         <li><strong>Máy chủ SMTP:</strong> <Text code>mail.nhanhoa.com</Text> (hoặc theo tên miền riêng dạng <Text code>mail.yourdomain.com</Text> nếu đã trỏ bản ghi).</li>
                         <li><strong>Cổng SSL khuyến nghị:</strong> <Text strong>465</Text> (Bật chế độ SSL/TLS) hoặc cổng <Text strong>587</Text> (STARTTLS).</li>
                         <li><strong>Tài khoản đăng nhập:</strong> Địa chỉ email đầy đủ của hộp thư (VD: <Text code>no-reply@yourdomain.com</Text>).</li>
@@ -630,7 +657,7 @@ export const SmtpSettingsPage: React.FC = () => {
                       <Paragraph>
                         Google không cho phép đăng nhập SMTP bằng mật khẩu tài khoản chính nếu chưa tạo <strong>Mật khẩu ứng dụng (App Password)</strong>:
                       </Paragraph>
-                      <ol style={{ paddingLeft: 20, color: '#334155', lineHeight: 1.8 }}>
+                      <ol style={{ paddingLeft: 20, color: token.colorText, lineHeight: 1.8 }}>
                         <li>Truy cập <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer">Google Account Security</a>.</li>
                         <li>Bật <strong>Xác minh 2 bước (2-Step Verification)</strong> nếu chưa bật.</li>
                         <li>Tìm mục <strong>Mật khẩu ứng dụng (App passwords)</strong> và tạo một mật khẩu mới cho ứng dụng "VinaCaptcha".</li>
@@ -648,7 +675,7 @@ export const SmtpSettingsPage: React.FC = () => {
                       <Paragraph>
                         Cấu hình gửi thư qua Microsoft 365 Exchange Online:
                       </Paragraph>
-                      <ul style={{ paddingLeft: 20, color: '#334155', lineHeight: 1.8 }}>
+                      <ul style={{ paddingLeft: 20, color: token.colorText, lineHeight: 1.8 }}>
                         <li><strong>Máy chủ SMTP:</strong> <Text code>smtp.office365.com</Text></li>
                         <li><strong>Cổng:</strong> <Text strong>587</Text> (STARTTLS).</li>
                         <li><strong>Tài khoản:</strong> Email người dùng Microsoft 365 có gán License Exchange Online.</li>
@@ -665,7 +692,7 @@ export const SmtpSettingsPage: React.FC = () => {
                       <Paragraph>
                         Cấu hình gửi email giao dịch qua dịch vụ SendGrid:
                       </Paragraph>
-                      <ul style={{ paddingLeft: 20, color: '#334155', lineHeight: 1.8 }}>
+                      <ul style={{ paddingLeft: 20, color: token.colorText, lineHeight: 1.8 }}>
                         <li><strong>Máy chủ SMTP:</strong> <Text code>smtp.sendgrid.net</Text> (Cổng 587).</li>
                         <li><strong>Tên đăng nhập (Username):</strong> Cố định là <Text code>apikey</Text>.</li>
                         <li><strong>Mật khẩu:</strong> API Key được tạo từ SendGrid Dashboard (bắt đầu bằng <Text code>SG....</Text>) với quyền <em>Mail Send</em>.</li>
@@ -686,11 +713,12 @@ export const SmtpSettingsPage: React.FC = () => {
           <Card 
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <SafetyCertificateOutlined style={{ color: '#7367f0' }} />
+                <SafetyCertificateOutlined style={{ color: token.colorPrimary }} />
                 <Text style={{ fontWeight: 600 }}>Xem Trước Mẫu Email Tự Động Sẽ Được Gửi (Preview)</Text>
               </div>
             }
             variant="borderless"
+            style={{ borderRadius: token.borderRadiusLG }}
           >
             <Tabs 
               items={[
@@ -702,27 +730,52 @@ export const SmtpSettingsPage: React.FC = () => {
                     </span>
                   ),
                   children: (
-                    <div style={{ maxWidth: 580, margin: '16px auto', border: '1px solid #e2e8f0', borderRadius: 12, padding: 24, background: '#ffffff', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+                    <div style={{ 
+                      maxWidth: 580, 
+                      margin: '16px auto', 
+                      border: `1px solid ${token.colorBorderSecondary}`, 
+                      borderRadius: token.borderRadiusLG, 
+                      padding: 24, 
+                      background: token.colorBgContainer, 
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                         <span style={{ fontSize: 24 }}>🛡️</span>
-                        <Text strong style={{ color: '#2563eb', fontSize: 18 }}>NhanHoaCaptcha</Text>
+                        <Text strong style={{ color: token.colorPrimary, fontSize: 18 }}>NhanHoaCaptcha</Text>
                       </div>
-                      <p style={{ color: '#334155' }}>Xin chào <strong>Nguyễn Văn A</strong>,</p>
-                      <p style={{ color: '#334155', fontSize: 13, lineHeight: 1.6 }}>
+                      <Paragraph style={{ color: token.colorText }}>Xin chào <strong>Nguyễn Văn A</strong>,</Paragraph>
+                      <Paragraph style={{ color: token.colorText, fontSize: 13, lineHeight: 1.6 }}>
                         Cảm ơn bạn đã đăng ký tài khoản trên hệ thống cổng bảo vệ Captcha nội bộ <strong>NhanHoaCaptcha</strong>.
-                      </p>
-                      <p style={{ color: '#334155', fontSize: 13 }}>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản của bạn và bắt đầu tích hợp:</p>
+                      </Paragraph>
+                      <Paragraph style={{ color: token.colorText, fontSize: 13 }}>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản của bạn và bắt đầu tích hợp:</Paragraph>
                       <div style={{ textAlign: 'center', margin: '24px 0' }}>
-                        <Button type="primary" size="large" style={{ background: '#2563eb', height: 42, padding: '0 28px', borderRadius: 8 }}>
+                        <Button 
+                          type="primary" 
+                          size="large" 
+                          style={{ 
+                            background: token.colorPrimary, 
+                            borderColor: token.colorPrimary,
+                            height: 42, 
+                            padding: '0 28px', 
+                            borderRadius: token.borderRadius 
+                          }}
+                        >
                           Kích Hoạt Tài Khoản Ngay →
                         </Button>
                       </div>
-                      <div style={{ backgroundColor: '#f8fafc', borderRadius: 8, padding: '10px 14px', margin: '20px 0', borderLeft: '4px solid #3b82f6' }}>
-                        <p style={{ margin: 0, fontSize: 12, color: '#475569' }}>
+                      <div style={{ 
+                        backgroundColor: token.colorBgLayout, 
+                        borderRadius: token.borderRadius, 
+                        padding: '10px 14px', 
+                        margin: '20px 0', 
+                        border: `1px solid ${token.colorBorderSecondary}`,
+                        borderLeft: `4px solid ${token.colorPrimary}` 
+                      }}>
+                        <Paragraph style={{ margin: 0, fontSize: 12, color: token.colorText }}>
                           🎁 Tài khoản của bạn được khởi tạo với <strong>Gói Trải Nghiệm (Free Trial)</strong>: Hỗ trợ tối đa 2 tên miền và 10.000 requests/tháng.
-                        </p>
+                        </Paragraph>
                       </div>
-                      <Divider style={{ margin: '16px 0' }} />
+                      <Divider style={{ margin: '16px 0', borderColor: token.colorBorderSecondary }} />
                       <Text type="secondary" style={{ fontSize: 11 }}>Trân trọng,<br/>Đội ngũ Phát triển NhanHoaCaptcha</Text>
                     </div>
                   ),
@@ -735,22 +788,37 @@ export const SmtpSettingsPage: React.FC = () => {
                     </span>
                   ),
                   children: (
-                    <div style={{ maxWidth: 580, margin: '16px auto', border: '1px solid #e2e8f0', borderRadius: 12, padding: 24, background: '#ffffff', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+                    <div style={{ 
+                      maxWidth: 580, 
+                      margin: '16px auto', 
+                      border: `1px solid ${token.colorBorderSecondary}`, 
+                      borderRadius: token.borderRadiusLG, 
+                      padding: 24, 
+                      background: token.colorBgContainer, 
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
+                    }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                         <span style={{ fontSize: 20 }}>⚠️</span>
-                        <Text strong style={{ color: '#ea5455', fontSize: 18 }}>Thông Báo Dung Lượng Captcha</Text>
+                        <Text strong style={{ color: token.colorError, fontSize: 18 }}>Thông Báo Dung Lượng Captcha</Text>
                       </div>
-                      <p style={{ color: '#334155' }}>Xin chào <strong>Nguyễn Văn A</strong>,</p>
-                      <p style={{ color: '#334155', fontSize: 13 }}>Hệ thống NhanHoaCaptcha xin thông báo tài khoản của bạn đã đạt mốc <strong>80%</strong> hạn mức sử dụng trong tháng:</p>
-                      <div style={{ backgroundColor: '#f8fafc', borderLeft: '4px solid #ff9f43', padding: 14, margin: '16px 0', borderRadius: 4, border: '1px solid #e2e8f0', borderLeftWidth: 4 }}>
-                        <p style={{ margin: '3px 0', fontSize: 13 }}><strong>Gói cước:</strong> Gói Trải Nghiệm</p>
-                        <p style={{ margin: '3px 0', fontSize: 13 }}><strong>Đã sử dụng:</strong> 8,000 / 10,000 requests</p>
-                        <p style={{ margin: '3px 0', fontSize: 13 }}><strong>Tỷ lệ tiêu thụ:</strong> 80%</p>
+                      <Paragraph style={{ color: token.colorText }}>Xin chào <strong>Nguyễn Văn A</strong>,</Paragraph>
+                      <Paragraph style={{ color: token.colorText, fontSize: 13 }}>Hệ thống NhanHoaCaptcha xin thông báo tài khoản của bạn đã đạt mốc <strong>80%</strong> hạn mức sử dụng trong tháng:</Paragraph>
+                      <div style={{ 
+                        backgroundColor: token.colorBgLayout, 
+                        border: `1px solid ${token.colorBorderSecondary}`,
+                        borderLeft: `4px solid ${token.colorWarning}`, 
+                        padding: 14, 
+                        margin: '16px 0', 
+                        borderRadius: token.borderRadius,
+                      }}>
+                        <p style={{ margin: '3px 0', fontSize: 13, color: token.colorText }}><strong>Gói cước:</strong> Gói Trải Nghiệm</p>
+                        <p style={{ margin: '3px 0', fontSize: 13, color: token.colorText }}><strong>Đã sử dụng:</strong> 8,000 / 10,000 requests</p>
+                        <p style={{ margin: '3px 0', fontSize: 13, color: token.colorText }}><strong>Tỷ lệ tiêu thụ:</strong> 80%</p>
                       </div>
-                      <p style={{ color: '#475569', fontSize: 13 }}>
+                      <Paragraph style={{ color: token.colorTextSecondary, fontSize: 13 }}>
                         Để đảm bảo hoạt động xác thực của website không bị gián đoạn, bạn có thể liên hệ Quản trị viên để nâng cấp gói cước cao hơn.
-                      </p>
-                      <Divider style={{ margin: '16px 0' }} />
+                      </Paragraph>
+                      <Divider style={{ margin: '16px 0', borderColor: token.colorBorderSecondary }} />
                       <Text type="secondary" style={{ fontSize: 11 }}>Trân trọng,<br/>Đội ngũ Kỹ thuật NhanHoaCaptcha</Text>
                     </div>
                   ),
