@@ -507,7 +507,9 @@ export class AdminService {
       challenge_mode: body.challenge_mode || 'auto',
       status: body.status || 'active',
     });
-    return this.sitesRepo.save(site);
+    const saved = await this.sitesRepo.save(site);
+    await this.redisService.invalidateCorsDomainsCache();
+    return saved;
   }
 
   async getSites(page: number, limit: number, accountId?: string, role?: string) {
@@ -541,6 +543,7 @@ export class AdminService {
     await this.getSiteById(id, accountId, role); // check permission
     await this.sitesRepo.update(id, dto);
     await this.redisService.invalidateAllApiKeyCache();
+    await this.redisService.invalidateCorsDomainsCache();
     return this.getSiteById(id, accountId, role);
   }
 
@@ -548,6 +551,7 @@ export class AdminService {
     await this.getSiteById(id, accountId, role); // check permission
     await this.sitesRepo.delete(id);
     await this.redisService.invalidateAllApiKeyCache();
+    await this.redisService.invalidateCorsDomainsCache();
     return { success: true };
   }
 

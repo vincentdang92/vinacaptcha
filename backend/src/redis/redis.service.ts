@@ -178,4 +178,62 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async invalidateDashboardStatsCache(): Promise<void> {
     await this.client.del('stats:dashboard:cache');
   }
+
+  /**
+   * Kiểm tra Domain có nằm trong danh sách website được đăng ký hoạt động trên hệ thống hay không (Dùng cho CORS)
+   */
+  async isDomainAllowed(domain: string, dataSource: any): Promise<boolean> {
+    const cleanDomain = domain.trim().toLowerCase();
+    
+    // 1. Kiểm tra cache Redis Set O(1)
+    const isMember = await this.client.sismember('cors:allowed_domains', cleanDomain);
+    if (isMember === 1) {
+      return true;
+    }
+
+    const cacheExists = await this.client.exists('cors:allowed_domains');
+    if (cacheExists === 1) {
+      return false;
+    }
+
+    // 2. Nếu Redis Set chưa có, load toàn bộ domain của các active site từ Postgres vào Redis Set
+    try {
+      const sites = await dataSource.query(`
+        SELECT primary_domain, allowed_domains 
+        FROM sites 
+        WHERE status = 'active'
+      `);
+
+      const domainSet = new Set<string>();
+      for (const site of sites) {
+        if (site.primary_domain) {
+          domainSet.add(site.primary_domain.trim().toLowerCase());
+        }
+        if (Array.isArray(site.allowed_domains)) {
+          for (const d of site.allowed_domains) {
+            if (d && typeof d === 'string') {
+              domainSet.add(d.trim().toLowerCase());
+            }
+          }
+        }
+      }
+
+      if (domainSet.size > 0) {
+        const domains = Array.from(domainSet);
+        const pipeline = this.client.pipeline();
+        pipeline.sadd('cors:allowed_domains', ...domains);
+        pipeline.expire('cors:allowed_domains', 300); // Cache 5 phút
+        await pipeline.exec();
+        return domainSet.has(cleanDomain);
+      }
+    } catch (err) {
+      console.error('[RedisService] Lỗi nạp danh sách domain CORS:', err);
+    }
+
+    return false;
+  }
+
+  async invalidateCorsDomainsCache(): Promise<void> {
+    await this.client.del('cors:allowed_domains');
+  }
 }
