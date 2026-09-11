@@ -122,8 +122,14 @@ export const RiskEnginePage: React.FC = () => {
                 - Dưới 600ms (tốc độ máy) ➔ <Tag color="error">+30 điểm</Tag> <br/>
                 - Dưới 1500ms ➔ <Tag color="warning">+15 điểm</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Chỉ số Tương tác Vật lý">
-                Nếu không có bất kỳ di chuyển chuột (<Text code>mouse_moves = 0</Text>) VÀ không có phím nào được gõ (<Text code>key_strokes = 0</Text>) ➔ <Tag color="error">+25 điểm</Tag>
+              <Descriptions.Item label="Chỉ số Tương tác Vật lý (Delta)">
+                Đo lường lượng di chuột/gõ phím <b>mới phát sinh</b> giữa các lần submit liên tiếp. Nếu đứng yên (<Text code>mouse_moves = 0</Text> VÀ <Text code>key_strokes = 0</Text>) ➔ <Tag color="error">+25 điểm</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Chống Bot Submit Lặp Lại (Anti-Automation)">
+                Nếu submit liên tiếp trên cùng 1 trang (<Text code>execution_count &gt; 1</Text>): <br/>
+                - Không có tương tác chuột/phím mới ➔ <Tag color="error">+50 điểm</Tag> (Ép giải thử thách ngay) <br/>
+                - Submit cách nhau dưới 2s ➔ <Tag color="warning">+35 điểm</Tag> <br/>
+                - Submit từ lần thứ 3 trở lên ➔ <Tag color="warning">+15 đến +40 điểm</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Mâu thuẫn Môi trường Phần cứng">
                 Màn hình ảo <Text code>0x0</Text> hoặc cấu hình phần cứng bất thường ➔ <Tag color="error">+20 điểm</Tag>
@@ -132,7 +138,7 @@ export const RiskEnginePage: React.FC = () => {
                 Canvas fingerprint trả về lỗi hoặc môi trường máy ảo rút gọn ➔ <Tag color="warning">+15 điểm</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Điểm thưởng Người thật (Human Bonus)">
-                Khách hàng tương tác phong phú (cuộn trang &gt;10%, thời gian điền &gt;2.5s, gõ phím &gt;3) ➔ <Tag color="success">-10 điểm thưởng</Tag> (ưu tiên Invisible Pass).
+                Khách hàng tương tác tự nhiên ở lần submit đầu (cuộn trang &gt;10%, thời gian điền &gt;2.5s, gõ phím &gt;3) ➔ <Tag color="success">-10 điểm thưởng</Tag> (ưu tiên Invisible Pass).
               </Descriptions.Item>
             </Descriptions>
           </Card>

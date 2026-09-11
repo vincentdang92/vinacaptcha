@@ -27,6 +27,14 @@ export class ClientSignalsDto {
 
   // UX & CRO Interaction Signals
   @IsOptional()
+  @IsNumber()
+  execution_count?: number;
+
+  @IsOptional()
+  @IsNumber()
+  total_page_duration_ms?: number;
+
+  @IsOptional()
   @IsBoolean()
   paste_detected?: boolean;
 

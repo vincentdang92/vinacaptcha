@@ -58,6 +58,14 @@ let globalTicking = false;
 let globalScrollTicking = false;
 const globalScriptStartTime = Date.now();
 
+// Execution Snapshot tracking (Interval delta between consecutive submissions)
+let lastExecutionTimestamp = globalScriptStartTime;
+let lastExecutionMouseMoves = 0;
+let lastExecutionMouseClicks = 0;
+let lastExecutionKeyStrokes = 0;
+let lastExecutionPasteCount = 0;
+let executionCount = 0;
+
 if (typeof window !== 'undefined') {
   // 1. Mouse movements
   window.addEventListener('mousemove', () => {
@@ -194,19 +202,56 @@ function collectClientTelemetry(customSignals?: any) {
   } catch {}
 
   const utm = parseMarketingParams();
-  const formFocusDelayMs = globalFirstInputFocusTime !== null ? Math.max(0, globalFirstInputFocusTime - globalScriptStartTime) : undefined;
+  const now = Date.now();
+  executionCount++;
+  const isFirstExecution = executionCount === 1;
+
+  // Tính toán delta tương tác giữa các lần submit liên tiếp
+  const timeOnPageMs = isFirstExecution
+    ? getGlobalTimeOnPageMs()
+    : Math.max(0, now - lastExecutionTimestamp);
+
+  const mouseMoves = isFirstExecution
+    ? globalMouseMoves
+    : Math.max(0, globalMouseMoves - lastExecutionMouseMoves);
+
+  const mouseClicks = isFirstExecution
+    ? globalMouseClicks
+    : Math.max(0, globalMouseClicks - lastExecutionMouseClicks);
+
+  const keyStrokes = isFirstExecution
+    ? globalKeyStrokes
+    : Math.max(0, globalKeyStrokes - lastExecutionKeyStrokes);
+
+  const pasteDetected = isFirstExecution
+    ? globalPasteCount > 0
+    : (globalPasteCount - lastExecutionPasteCount) > 0;
+
+  const formFocusDelayMs =
+    globalFirstInputFocusTime !== null
+      ? Math.max(0, globalFirstInputFocusTime - globalScriptStartTime)
+      : undefined;
+
+  // Cập nhật snapshot cho lần submit tiếp theo
+  lastExecutionTimestamp = now;
+  lastExecutionMouseMoves = globalMouseMoves;
+  lastExecutionMouseClicks = globalMouseClicks;
+  lastExecutionKeyStrokes = globalKeyStrokes;
+  lastExecutionPasteCount = globalPasteCount;
 
   return {
-    // Core Security & Timing
+    // Core Security & Timing (Interval delta between submissions)
     webdriver: nav.webdriver || false,
-    time_on_page_ms: getGlobalTimeOnPageMs(),
-    mouse_moves: globalMouseMoves,
-    mouse_clicks: globalMouseClicks,
-    key_strokes: globalKeyStrokes,
-    paste_detected: globalPasteCount > 0,
+    time_on_page_ms: timeOnPageMs,
+    mouse_moves: mouseMoves,
+    mouse_clicks: mouseClicks,
+    key_strokes: keyStrokes,
+    paste_detected: pasteDetected,
     tab_switch_count: globalTabSwitchCount,
     scroll_depth_pct: globalMaxScrollPct,
     form_focus_delay_ms: formFocusDelayMs,
+    execution_count: executionCount,
+    total_page_duration_ms: getGlobalTimeOnPageMs(),
 
     // Device & Screen
     screen_width: scr.width || 0,
@@ -240,13 +285,7 @@ class NhanHoaCaptcha {
   private container: HTMLElement;
   private config: NhanHoaCaptchaConfig;
   private form: HTMLFormElement | null = null;
-  private loadTime: number;
   private isSubmitting: boolean = false;
-
-  // Behavior signals
-  private mouseMoves: number = 0;
-  private mouseClicks: number = 0;
-  private keyStrokes: number = 0;
 
   constructor(containerId: string, config: NhanHoaCaptchaConfig | string) {
     const el = document.getElementById(containerId);
@@ -264,7 +303,6 @@ class NhanHoaCaptcha {
       };
     }
 
-    this.loadTime = Date.now();
     this.form = this.container.closest('form');
     this.init();
 
@@ -291,10 +329,7 @@ class NhanHoaCaptcha {
       NhanHoaCaptcha.ensureBadge();
     }
 
-    // 4. Theo dõi hành vi chuột/bàn phím
-    this.startBehaviorTracking();
-
-    // 5. Móc vào form submit
+    // 4. Móc vào form submit
     if (this.form) {
       let tokenInput = this.form.querySelector<HTMLInputElement>('input[name="vina_captcha_token"]');
       if (!tokenInput) {
@@ -493,19 +528,7 @@ class NhanHoaCaptcha {
     NhanHoaCaptcha.setBadgeState(state, customText);
   }
 
-  // ─── Behavior Tracking ───────────────────────────────────────────────────────
 
-  private startBehaviorTracking() {
-    let ticking = false;
-    window.addEventListener('mousemove', () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => { this.mouseMoves++; ticking = false; });
-        ticking = true;
-      }
-    }, { passive: true });
-    window.addEventListener('click', () => { this.mouseClicks++; }, { passive: true });
-    window.addEventListener('keydown', () => { this.keyStrokes++; }, { passive: true });
-  }
 
   // ─── Canvas Fingerprint ──────────────────────────────────────────────────────
 
@@ -850,10 +873,6 @@ class NhanHoaCaptcha {
     const clientSignals = {
       ...collectClientTelemetry(),
       canvas_fingerprint: this.getCanvasFingerprint(),
-      time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
-      mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
-      mouse_clicks: Math.max(this.mouseClicks, globalMouseClicks),
-      key_strokes: Math.max(this.keyStrokes, globalKeyStrokes),
     };
 
     if (this.config.debug) {
@@ -981,10 +1000,6 @@ class NhanHoaCaptcha {
     const clientSignals = {
       ...collectClientTelemetry(options?.customSignals),
       canvas_fingerprint: this.getCanvasFingerprint(),
-      time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
-      mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
-      mouse_clicks: Math.max(this.mouseClicks, globalMouseClicks),
-      key_strokes: Math.max(this.keyStrokes, globalKeyStrokes),
     };
 
     let clientReportedIp: string | undefined;

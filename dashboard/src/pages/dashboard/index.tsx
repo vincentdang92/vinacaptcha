@@ -493,16 +493,23 @@ export const DashboardPage = () => {
                       
                       {/* Hiển thị tóm tắt Client Signals (Nguồn traffic/Hành vi) */}
                       {signals && (
-                        <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 180 }}>
+                        <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 190 }}>
                           {signals.webdriver && <Tag color="error" style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>Bot Webdriver</Tag>}
-                          {signals.time_on_page_ms && (
-                            <Tooltip title="Thời gian từ lúc load form tới lúc submit">
+                          {signals.execution_count && signals.execution_count > 1 && (
+                            <Tooltip title={`Lượt submit thứ ${signals.execution_count} trên cùng 1 phiên trang`}>
+                              <Tag color="purple" style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
+                                🔁 Lặp #{signals.execution_count}
+                              </Tag>
+                            </Tooltip>
+                          )}
+                          {signals.time_on_page_ms !== undefined && (
+                            <Tooltip title={`Khoảng cách submit: ${(signals.time_on_page_ms / 1000).toFixed(1)}s (Tổng thời gian trên trang: ${((signals.total_page_duration_ms || signals.time_on_page_ms) / 1000).toFixed(1)}s)`}>
                               <Tag color={signals.time_on_page_ms < 600 ? "error" : "default"} style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
                                 ⏱️ {(signals.time_on_page_ms / 1000).toFixed(1)}s
                               </Tag>
                             </Tooltip>
                           )}
-                          <Tooltip title={`Tương tác: ${signals.mouse_moves || 0} di chuột, ${signals.mouse_clicks || 0} click, ${signals.key_strokes || 0} phím`}>
+                          <Tooltip title={`Tương tác lượt này: ${signals.mouse_moves || 0} di chuột, ${signals.mouse_clicks || 0} click, ${signals.key_strokes || 0} phím`}>
                             <Tag color={(signals.mouse_moves === 0 && signals.key_strokes === 0) ? "error" : "default"} style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
                               🖱️ {signals.mouse_moves || 0} | ⌨️ {signals.key_strokes || 0}
                             </Tag>

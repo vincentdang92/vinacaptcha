@@ -81,6 +81,22 @@ export class RiskEngineService {
       clientBehaviorScore += 15;
     }
 
+    // Phát hiện bot submit lặp lại trên cùng 1 trang không có tương tác mới (Anti-Automation)
+    if (signals.execution_count && signals.execution_count > 1) {
+      if (noMouse && noKeys) {
+        // Submit liên tiếp nhưng chuột/phím hoàn toàn đứng yên -> Vòng lặp Bot tự động
+        clientBehaviorScore += 50;
+      }
+      if (signals.time_on_page_ms < 2000) {
+        // Submit lặp lại liên tục cách nhau dưới 2 giây
+        clientBehaviorScore += 35;
+      }
+      if (signals.execution_count >= 3) {
+        // Submit từ lần thứ 3 trở lên trên cùng 1 trang -> Tăng dần điểm cảnh giác
+        clientBehaviorScore += Math.min(40, (signals.execution_count - 2) * 15);
+      }
+    }
+
     // Phát hiện GPU ảo / Môi trường headless server (SwiftShader, llvmpipe, Mesa, VirtualBox, VMware)
     if (signals.gpu_renderer) {
       const lowerGpu = signals.gpu_renderer.toLowerCase();
@@ -105,7 +121,8 @@ export class RiskEngineService {
     const hasRichInteraction =
       (signals.mouse_moves ?? 0) > 10 &&
       (signals.key_strokes ?? 0) > 3 &&
-      (signals.time_on_page_ms ?? 0) > 2500;
+      (signals.time_on_page_ms ?? 0) > 2500 &&
+      (!signals.execution_count || signals.execution_count === 1);
 
     if (hasRichInteraction && clientBehaviorScore > 0) {
       clientBehaviorScore = Math.max(0, clientBehaviorScore - 10);
@@ -157,11 +174,14 @@ export class RiskEngineService {
     const rateLimitKey = `ratelimit:issue:${clientIp}`;
     const requestCount = await this.redisService.incrementRateLimit(rateLimitKey, 10); // Cửa sổ 10s
 
-    if (requestCount > 25) {
+    if (requestCount > 20) {
       // Spam dồn dập
-      rateLimitScore += 50;
+      rateLimitScore += 60;
     } else if (requestCount > 10) {
       // Tần suất cao bất thường
+      rateLimitScore += 40;
+    } else if (requestCount > 4) {
+      // Gọi > 4 lần trong 10s từ cùng 1 IP
       rateLimitScore += 25;
     }
 

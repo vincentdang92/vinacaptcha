@@ -111,7 +111,7 @@ describe('RiskEngineService', () => {
     it('should add rate limit score if redis increment is high', async () => {
       mockThreatIntelService.checkIp.mockResolvedValue({ matched: false });
       mockReputationService.checkIpReputation.mockResolvedValue({ hasRecord: false });
-      mockRedisService.incrementRateLimit.mockResolvedValue(30); // > 25 = +50 score
+      mockRedisService.incrementRateLimit.mockResolvedValue(30); // > 20 = +60 score
 
       const signals: ClientSignalsDto = {
         webdriver: false,
@@ -124,9 +124,55 @@ describe('RiskEngineService', () => {
 
       const result = await service.evaluateRisk('3.4.5.6', signals, false);
 
-      expect(result.challengeType).toBe('slider'); // Score is 50 -> slider (>= 30)
+      expect(result.challengeType).toBe('slider'); // Score is 60 -> slider (>= 30)
+      expect(result.riskScore).toBe(60);
+      expect(result.breakdown.rateLimitScore).toBe(60);
+    });
+
+    it('should escalate to challenge when repeated submission has zero fresh physical interaction', async () => {
+      mockThreatIntelService.checkIp.mockResolvedValue({ matched: false });
+      mockReputationService.checkIpReputation.mockResolvedValue({ hasRecord: false });
+      mockRedisService.incrementRateLimit.mockResolvedValue(1);
+
+      // Repeated submission (execution_count = 2) with 0 fresh mouse moves and 0 keystrokes
+      const signals: ClientSignalsDto = {
+        webdriver: false,
+        canvas_fingerprint: 'abcd123',
+        time_on_page_ms: 3000,
+        mouse_moves: 0,
+        mouse_clicks: 0,
+        key_strokes: 0,
+        execution_count: 2,
+      };
+
+      const result = await service.evaluateRisk('1.2.3.4', signals, false);
+
+      // Score: 25 (noMouse && noKeys) + 50 (execution_count > 1 && noMouse && noKeys) = 75 -> 'pow' challenge
+      expect(result.challengeType).toBe('pow');
+      expect(result.riskScore).toBe(75);
+      expect(result.breakdown.clientBehaviorScore).toBe(75);
+    });
+
+    it('should penalize rapid consecutive submit in less than 2s', async () => {
+      mockThreatIntelService.checkIp.mockResolvedValue({ matched: false });
+      mockReputationService.checkIpReputation.mockResolvedValue({ hasRecord: false });
+      mockRedisService.incrementRateLimit.mockResolvedValue(1);
+
+      const signals: ClientSignalsDto = {
+        webdriver: false,
+        canvas_fingerprint: 'abcd123',
+        time_on_page_ms: 800, // < 2000ms (+35) and < 1500ms (+15)
+        mouse_moves: 5,
+        mouse_clicks: 1,
+        key_strokes: 2,
+        execution_count: 2,
+      };
+
+      const result = await service.evaluateRisk('1.2.3.4', signals, false);
+
+      // 15 (time < 1500) + 35 (execution_count > 1 && time < 2000) = 50 -> 'slider' challenge
+      expect(result.challengeType).toBe('slider');
       expect(result.riskScore).toBe(50);
-      expect(result.breakdown.rateLimitScore).toBe(50);
     });
   });
 });
