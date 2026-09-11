@@ -52,8 +52,6 @@ class NhanHoaCaptcha {
   private form: HTMLFormElement | null = null;
   private loadTime: number;
   private isSubmitting: boolean = false;
-  private badge: HTMLElement | null = null;
-  private badgeText: HTMLElement | null = null;
 
   // Behavior signals
   private mouseMoves: number = 0;
@@ -100,7 +98,7 @@ class NhanHoaCaptcha {
 
     // 3. Badge góc dưới phải trang
     if (!this.config.hideBadge) {
-      this.createBadge();
+      NhanHoaCaptcha.ensureBadge();
     }
 
     // 4. Theo dõi hành vi chuột/bàn phím
@@ -122,10 +120,18 @@ class NhanHoaCaptcha {
     }
   }
 
-  // ─── Badge UI ────────────────────────────────────────────────────────────────
+  // ─── Badge UI (Floating Singleton) ──────────────────────────────────────────
 
-  private createBadge() {
-    if (document.getElementById('vina-captcha-badge')) return;
+  public static ensureBadge(options?: { hideBadge?: boolean }): { badge: HTMLElement; badgeText: HTMLElement } | null {
+    if (typeof document === 'undefined') return null;
+    if (options?.hideBadge || (window as any).vinaCaptchaHideBadge) return null;
+
+    let badge = document.getElementById('vina-captcha-badge');
+    let text = badge?.querySelector<HTMLElement>('.vina-badge-text');
+
+    if (badge && text) {
+      return { badge, badgeText: text };
+    }
 
     // Inject CSS styling once for badge animation & responsive slider out
     if (!document.getElementById('vina-captcha-badge-style')) {
@@ -133,91 +139,108 @@ class NhanHoaCaptcha {
       style.id = 'vina-captcha-badge-style';
       style.textContent = `
         #vina-captcha-badge {
-          position: fixed;
-          bottom: 14px;
-          right: 14px;
-          z-index: 99999;
-          display: inline-flex;
-          align-items: center;
-          justify-content: flex-end;
-          height: 36px;
-          min-width: 36px;
-          padding: 0 9px;
-          background: rgba(255, 255, 255, 0.96);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border: 1px solid rgba(0, 0, 0, 0.12);
-          border-radius: 18px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          font-size: 11.5px;
-          font-weight: 500;
-          color: #374151;
-          cursor: pointer;
-          user-select: none;
-          text-decoration: none;
-          box-sizing: border-box;
-          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-          overflow: hidden;
+          position: fixed !important;
+          bottom: 16px !important;
+          right: 16px !important;
+          z-index: 2147483647 !important;
+          display: inline-flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: flex-end !important;
+          height: 38px !important;
+          min-width: 38px !important;
+          max-width: fit-content !important;
+          padding: 0 10px !important;
+          margin: 0 !important;
+          background: #ffffff !important;
+          backdrop-filter: blur(8px) !important;
+          -webkit-backdrop-filter: blur(8px) !important;
+          border: 1px solid rgba(0, 0, 0, 0.12) !important;
+          border-radius: 19px !important;
+          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12) !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          color: #374151 !important;
+          cursor: pointer !important;
+          user-select: none !important;
+          text-decoration: none !important;
+          box-sizing: border-box !important;
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          overflow: hidden !important;
+          opacity: 1 !important;
+          visibility: visible !important;
+          transform: none !important;
+          pointer-events: auto !important;
         }
 
         #vina-captcha-badge:hover,
         #vina-captcha-badge.vina-badge-expanded {
-          padding-left: 12px;
-          padding-right: 10px;
-          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
-          border-color: rgba(37, 99, 235, 0.35);
-          background: #ffffff;
+          padding-left: 14px !important;
+          padding-right: 10px !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18) !important;
+          border-color: rgba(37, 99, 235, 0.35) !important;
+          background: #ffffff !important;
         }
 
         #vina-captcha-badge .vina-badge-text {
-          max-width: 0;
-          opacity: 0;
-          overflow: hidden;
-          white-space: nowrap;
-          margin-right: 0;
-          color: #374151;
-          font-size: 11.5px;
-          line-height: 1;
-          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-right 0.35s ease;
-          pointer-events: none;
+          max-width: 0 !important;
+          opacity: 0 !important;
+          overflow: hidden !important;
+          white-space: nowrap !important;
+          margin: 0 !important;
+          margin-right: 0 !important;
+          padding: 0 !important;
+          color: #374151 !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          line-height: 1 !important;
+          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-right 0.35s ease !important;
+          pointer-events: none !important;
+          display: inline-block !important;
         }
 
         #vina-captcha-badge:hover .vina-badge-text,
         #vina-captcha-badge.vina-badge-expanded .vina-badge-text {
-          max-width: 220px;
-          opacity: 1;
-          margin-right: 8px;
-          pointer-events: auto;
+          max-width: 250px !important;
+          opacity: 1 !important;
+          margin-right: 8px !important;
+          pointer-events: auto !important;
         }
 
         #vina-captcha-badge .vina-badge-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          color: #2563eb;
-          flex-shrink: 0;
-          transition: transform 0.3s ease, color 0.3s ease;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          width: 18px !important;
+          height: 18px !important;
+          color: #2563eb !important;
+          flex-shrink: 0 !important;
+          transition: transform 0.3s ease, color 0.3s ease !important;
         }
 
         #vina-captcha-badge:hover .vina-badge-icon {
-          transform: scale(1.08);
+          transform: scale(1.1) !important;
         }
       `;
-      document.head.appendChild(style);
+      (document.head || document.documentElement).appendChild(style);
     }
 
-    const badge = document.createElement('div');
+    if (!document.body) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => NhanHoaCaptcha.ensureBadge(options));
+      }
+      return null;
+    }
+
+    badge = document.createElement('div');
     badge.id = 'vina-captcha-badge';
     badge.setAttribute('title', 'Protected by NhanHoaCaptcha');
 
     // 1. Text description on the left (slides out smoothly when hovered)
-    const text = document.createElement('span');
+    text = document.createElement('span');
     text.className = 'vina-badge-text';
     text.textContent = 'Protected by NhanHoaCaptcha';
-    this.badgeText = text;
 
     // 2. Shield icon on the right
     const icon = document.createElement('span');
@@ -237,11 +260,13 @@ class NhanHoaCaptcha {
     });
 
     document.body.appendChild(badge);
-    this.badge = badge;
+    return { badge, badgeText: text };
   }
 
-  private setBadgeState(state: BadgeState, customText?: string) {
-    if (!this.badge || !this.badgeText) return;
+  public static setBadgeState(state: BadgeState, customText?: string) {
+    const badgeInfo = NhanHoaCaptcha.ensureBadge();
+    if (!badgeInfo) return;
+    const { badge, badgeText } = badgeInfo;
 
     const styles: Record<BadgeState, { color: string; text: string }> = {
       idle:    { color: '#2563eb', text: 'Protected by NhanHoaCaptcha' },
@@ -251,29 +276,31 @@ class NhanHoaCaptcha {
     };
 
     const s = styles[state];
-    this.badgeText.textContent = customText || s.text;
+    badgeText.textContent = customText || s.text;
 
-    const iconEl = this.badge.querySelector<HTMLElement>('.vina-badge-icon');
+    const iconEl = badge.querySelector<HTMLElement>('.vina-badge-icon');
     if (iconEl) iconEl.style.color = s.color;
-    this.badge.style.borderColor = state === 'idle' ? 'rgba(0,0,0,0.12)' : s.color + '66';
+    badge.style.borderColor = state === 'idle' ? 'rgba(0,0,0,0.12)' : s.color + '66';
 
     // Tự động mở rộng badge khi trạng thái thay đổi để user nhận biết
     if (state !== 'idle') {
-      this.badge.classList.add('vina-badge-expanded');
+      badge.classList.add('vina-badge-expanded');
     }
 
     if (state === 'success' || state === 'error') {
       setTimeout(() => {
-        if (this.badge) {
-          this.badge.classList.remove('vina-badge-expanded');
-          if (state === 'success') {
-            this.setBadgeState('idle');
-          }
+        badge.classList.remove('vina-badge-expanded');
+        if (state === 'success') {
+          NhanHoaCaptcha.setBadgeState('idle');
         }
       }, 2200);
     } else if (state === 'idle') {
-      this.badge.classList.remove('vina-badge-expanded');
+      badge.classList.remove('vina-badge-expanded');
     }
+  }
+
+  private setBadgeState(state: BadgeState, customText?: string) {
+    NhanHoaCaptcha.setBadgeState(state, customText);
   }
 
   // ─── Behavior Tracking ───────────────────────────────────────────────────────
@@ -883,6 +910,7 @@ class NhanHoaCaptcha {
 
   public static ready(callback: () => void): void {
     if (typeof document === 'undefined') return;
+    NhanHoaCaptcha.ensureBadge();
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       setTimeout(callback, 1);
     } else {
@@ -902,6 +930,9 @@ class NhanHoaCaptcha {
 
     if (typeof document === 'undefined') return '';
 
+    NhanHoaCaptcha.ensureBadge();
+    NhanHoaCaptcha.setBadgeState('loading');
+
     const virtualContainer = document.createElement('div');
     virtualContainer.id = `nhanhoa-captcha-exec-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     virtualContainer.style.display = 'none';
@@ -911,7 +942,7 @@ class NhanHoaCaptcha {
       const instance = new NhanHoaCaptcha(virtualContainer.id, {
         siteKey,
         baseUrl,
-        hideBadge: true,
+        hideBadge: false,
         forceChallenge: options?.forceChallenge,
       });
 
@@ -921,9 +952,16 @@ class NhanHoaCaptcha {
       });
 
       virtualContainer.remove();
-      return res.success && res.verify_token ? res.verify_token : '';
+      if (res.success && res.verify_token) {
+        NhanHoaCaptcha.setBadgeState('success');
+        return res.verify_token;
+      } else {
+        NhanHoaCaptcha.setBadgeState('error', res.reason || 'Xác thực thất bại');
+        return '';
+      }
     } catch (err) {
       virtualContainer.remove();
+      NhanHoaCaptcha.setBadgeState('error', 'Lỗi kết nối');
       console.error('[NhanHoaCaptcha] Programmatic execute failed:', err);
       return '';
     }
@@ -934,6 +972,11 @@ class NhanHoaCaptcha {
 if (typeof window !== 'undefined') {
   (window as any).NhanHoaCaptcha = NhanHoaCaptcha;
   (window as any).VinaCaptcha = NhanHoaCaptcha;
+
+  // Auto-mount badge on DOM ready
+  NhanHoaCaptcha.ready(() => {
+    NhanHoaCaptcha.ensureBadge();
+  });
 }
 export default NhanHoaCaptcha;
 
