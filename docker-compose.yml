@@ -49,12 +49,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-captcha_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-captcha_db}
       BACKEND_DATABASE_HOST: postgres
       BACKEND_DATABASE_PORT: 5432
       BACKEND_DATABASE_USER: ${POSTGRES_USER:-captcha_user}
       BACKEND_DATABASE_PASS: ${POSTGRES_PASSWORD}
       BACKEND_DATABASE_NAME: ${POSTGRES_DB:-captcha_db}
       BACKEND_REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       APP_SALT: ${APP_SALT:-}
       APP_URL: ${APP_URL:-}
