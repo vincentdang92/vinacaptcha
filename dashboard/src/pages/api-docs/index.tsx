@@ -41,9 +41,10 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
    - Nhúng Widget JS \`vina-captcha.js\` vào form.
    - Khởi tạo Widget bằng **Public Site Key (UUID)**: \`new NhanHoaCaptcha("container-id", "YOUR_SITE_KEY_UUID")\`.
    - Khi user submit form, Widget tự động tạo \`verify_token\` ngắn hạn (60s) gắn vào field ẩn \`vina_captcha_token\` trong form.
-2. **Backend (Server)**:
+2. **Backend (Server) & Chiến Lược Fail-Open Fallback (Timeout > 5s)**:
    - Server nhận \`vina_captcha_token\` từ request submit của client.
-   - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\`.
+   - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\` với **Timeout tối đa 5 giây (5000ms)**.
+   - **Giai đoạn thử nghiệm (Testing/Trial Mode)**: Nếu request bị treo quá 5s hoặc máy chủ Captcha trả về lỗi hệ thống (5xx), Backend của bạn nên **ƯU TIÊN CHO PASS (\`success: true\`)** để không gián đoạn giao dịch của người dùng thật.
    - Nếu \`success: true\` → Cho phép xử lý tiếp (Login, Register, Thanh toán...).
    - Nếu \`success: false\` → Chặn và báo lỗi "Xác thực Captcha thất bại".
 
@@ -53,7 +54,7 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 ### 🚀 1. PHP / Laravel Framework
 
-#### Validation Rule (\`app/Rules/NhanHoaCaptcha.php\`):
+#### Validation Rule (\`app/Rules/NhanHoaCaptcha.php\`) với 5s Timeout Fallback:
 \`\`\`php
 <?php
 namespace App\\Rules;
@@ -61,18 +62,33 @@ namespace App\\Rules;
 use Closure;
 use Illuminate\\Contracts\\Validation\\ValidationRule;
 use Illuminate\\Support\\Facades\\Http;
+use Illuminate\\Support\\Facades\\Log;
 
 class NhanHoaCaptcha implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        $response = Http::asJson()->post(config('services.vinacaptcha.base_url', 'https://your-captcha-domain.com') . '/v1/siteverify', [
-            'secret'       => config('services.vinacaptcha.secret_key'), // cap_live_...
-            'verify_token' => $value,
-        ]);
+        try {
+            // Cài đặt timeout 5 giây
+            $response = Http::timeout(5)->asJson()->post(config('services.vinacaptcha.base_url', 'https://your-captcha-domain.com') . '/v1/siteverify', [
+                'secret'       => config('services.vinacaptcha.secret_key'), // cap_live_...
+                'verify_token' => $value,
+            ]);
 
-        if (!$response->successful() || !($response->json('success') ?? false)) {
-            $fail('Xác thực bảo mật NhanHoaCaptcha không hợp lệ hoặc đã hết hạn.');
+            // Nếu máy chủ captcha trả về lỗi 5xx trong giai đoạn thử nghiệm -> Ưu tiên cho pass
+            if (!$response->successful()) {
+                Log::warning('[NhanHoaCaptcha] Server error, fail-open fallback applied.');
+                return;
+            }
+
+            // Nếu token sai hoặc đã qua sử dụng
+            if (!($response->json('success') ?? false)) {
+                $fail('Xác thực bảo mật NhanHoaCaptcha không hợp lệ hoặc đã hết hạn.');
+            }
+        } catch (\\Throwable $e) {
+            // Nếu bị treo > 5s hoặc lỗi mạng -> Ưu tiên cho pass trong giai đoạn thử nghiệm
+            Log::warning('[NhanHoaCaptcha] Timeout (>5s) or exception, fail-open applied: ' . $e->getMessage());
+            return;
         }
     }
 }
@@ -96,7 +112,7 @@ public function login(Request $request)
 
 ### 🌐 2. WordPress (functions.php hoặc Custom Plugin)
 
-Thêm đoạn code sau vào file \`functions.php\` của theme đang dùng:
+Thêm đoạn code sau vào file \`functions.php\` của theme đang dùng (Kèm Timeout 5s & Fail-Open):
 
 \`\`\`php
 // 1. Nhúng Widget JS vào trang Login / Register
@@ -129,11 +145,18 @@ add_filter('authenticate', function($user, $username, $password) {
             'secret'       => 'cap_live_YOUR_SECRET_KEY',
             'verify_token' => $token,
         ]),
-        'timeout' => 5
+        'timeout' => 5 // Timeout tối đa 5 giây
     ]);
 
+    // Fail-Open Fallback: Nếu treo quá 5s hoặc lỗi kết nối -> Ưu tiên cho pass trong giai đoạn thử nghiệm
     if (is_wp_error($response)) {
-        return new WP_Error('captcha_failed', 'Lỗi kết nối máy chủ Captcha.');
+        error_log('[NhanHoaCaptcha] Siteverify timeout (>5s)/error, fail-open allowed.');
+        return $user;
+    }
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    if ($status_code >= 500) {
+        return $user; // Fallback khi máy chủ captcha quá tải
     }
 
     $body = json_decode(wp_remote_retrieve_body($response), true);
@@ -149,7 +172,7 @@ add_filter('authenticate', function($user, $username, $password) {
 
 ### 🟢 3. Node.js (Express / NestJS)
 
-#### Express Middleware:
+#### Express Middleware với Timeout 5s & Fail-Open Fallback:
 \`\`\`typescript
 import axios from 'axios';
 import { Request, Response, NextFunction } from 'express';
@@ -164,6 +187,8 @@ export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: Ne
     const response = await axios.post('https://your-captcha-domain.com/v1/siteverify', {
       secret: process.env.VINACAPTCHA_SECRET_KEY, // cap_live_...
       verify_token: token,
+    }, {
+      timeout: 5000 // Timeout 5 giây
     });
 
     if (response.data?.success) {
@@ -173,8 +198,10 @@ export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: Ne
       return next();
     }
     return res.status(403).json({ error: 'Captcha verification failed', reason: response.data?.reason });
-  } catch (err) {
-    return res.status(500).json({ error: 'Captcha verification server error' });
+  } catch (err: any) {
+    // Fallback: Nếu hệ thống treo > 5s hoặc lỗi mạng -> Ưu tiên SUCCESS trong giai đoạn thử nghiệm
+    console.warn('[NhanHoaCaptcha] Siteverify timeout (>5s) or error, applying fail-open fallback:', err.message);
+    return next(); // Cho phép tiếp tục luồng xử lý
   }
 }
 \`\`\`
@@ -183,7 +210,7 @@ export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: Ne
 
 ### 🐍 4. Python (Django / FastAPI)
 
-#### FastAPI Dependency:
+#### FastAPI Dependency với Timeout 5s & Fail-Open Fallback:
 \`\`\`python
 import httpx
 from fastapi import HTTPException, Header, Body
@@ -192,14 +219,27 @@ VINACAPTCHA_VERIFY_URL = "https://your-captcha-domain.com/v1/siteverify"
 SECRET_KEY = "cap_live_YOUR_SECRET_KEY"
 
 async def verify_captcha(vina_captcha_token: str = Body(..., embed=True)):
-    async with httpx.AsyncClient() as client:
-        res = await client.post(VINACAPTCHA_VERIFY_URL, json={
-            "secret": SECRET_KEY,
-            "verify_token": vina_captcha_token
-        })
-        data = res.json()
-        if not data.get("success"):
-            raise HTTPException(status_code=400, detail="Invalid Captcha token")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client: # Timeout 5 giây
+            res = await client.post(VINACAPTCHA_VERIFY_URL, json={
+                "secret": SECRET_KEY,
+                "verify_token": vina_captcha_token
+            })
+            if res.status_code >= 500:
+                print("[NhanHoaCaptcha] Server 5xx error, applying fail-open fallback.")
+                return True
+            data = res.json()
+            if not data.get("success"):
+                raise HTTPException(status_code=400, detail="Invalid Captcha token")
+    except httpx.TimeoutException:
+        # Fallback: Treo quá 5s -> Ưu tiên cho pass trong giai đoạn thử nghiệm
+        print("[NhanHoaCaptcha] Timeout > 5s, applying fail-open fallback.")
+        return True
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[NhanHoaCaptcha] Network exception: {e}, fail-open applied.")
+        return True
     return True
 \`\`\`
 
@@ -374,25 +414,56 @@ export const ApiDocsPage = () => {
             Phải gọi <Text code>/v1/siteverify</Text> kèm <Text code>secret</Text> (<Text code>cap_live_...</Text>) để xác nhận token hợp lệ — <strong>tuyệt đối không để lộ secret key ở client</strong>.
           </Paragraph>
 
+          <Alert
+            type="warning"
+            showIcon
+            icon={<SafetyOutlined />}
+            message="Chiến Lược Dự Phòng Thất Bại (Fail-Open Fallback — Timeout 5s)"
+            description={
+              <div>
+                Trong giai đoạn thử nghiệm (Testing/Trial Mode), nếu kết nối tới máy chủ Captcha bị <strong>treo quá 5 giây (Timeout &gt; 5s)</strong> hoặc server captcha gặp lỗi 5xx, backend của bạn nên <strong>ƯU TIÊN CHO PASS (success: true)</strong> để tránh làm gián đoạn trải nghiệm hoặc chặn người dùng thật.
+              </div>
+            }
+            style={{ marginBottom: 16 }}
+          />
+
           <Tabs
             defaultActiveKey="nodejs"
             size="small"
             items={[
               {
                 key: "nodejs",
-                label: "Node.js (Express)",
+                label: "Node.js (Express / Fetch)",
                 children: (
                   <CodeBlock lang="js" code={`const verifyToken = async (vinaToken, siteSecretKey) => {
-  const resp = await fetch('${BASE_URL}/v1/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      secret: siteSecretKey,             // Khóa bí mật Server (cap_live_...)
-      verify_token: vinaToken            // Token nhận từ client submit
-    })
-  });
-  const data = await resp.json();
-  return data;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // ⏱️ Timeout 5s
+
+    const resp = await fetch('${BASE_URL}/v1/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: siteSecretKey,             // Khóa bí mật Server (cap_live_...)
+        verify_token: vinaToken            // Token nhận từ client submit
+      }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      // 🛡️ Fallback: Server lỗi 5xx trong giai đoạn thử nghiệm -> Cho qua
+      console.warn('[NhanHoaCaptcha] Server status >= 500, ưu tiên cho pass trong lúc thử nghiệm.');
+      return { success: true, fallback: true };
+    }
+
+    const data = await resp.json();
+    return data;
+  } catch (err) {
+    // 🛡️ Fallback: Quá thời gian 5s hoặc lỗi mạng -> Ưu tiên SUCCESS trong lúc thử nghiệm
+    console.warn('[NhanHoaCaptcha] Timeout > 5s hoặc lỗi mạng, fail-open fallback áp dụng:', err.message);
+    return { success: true, fallback: true };
+  }
 };
 
 // Trong route xử lý login:
@@ -404,7 +475,7 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Captcha không hợp lệ hoặc đã hết hạn', reason: result.reason });
   }
   
-  // Xác thực thành công! Điểm đánh giá: result.score, mức độ: result.risk_level
+  // Xác thực thành công! (Điểm đánh giá: result.score, mức độ: result.risk_level)
   console.log('Xác thực hợp lệ từ hostname:', result.hostname, 'Score:', result.score);
   // Tiếp tục xử lý đăng nhập...
 });`} />
@@ -412,7 +483,7 @@ app.post('/login', async (req, res) => {
               },
               {
                 key: "php",
-                label: "PHP",
+                label: "PHP / Laravel",
                 children: (
                   <CodeBlock lang="php" code={`<?php
 function verifyNhanHoaCaptcha(string $vinaToken, string $siteSecret): array {
@@ -426,13 +497,23 @@ function verifyNhanHoaCaptcha(string $vinaToken, string $siteSecret): array {
             'method'  => 'POST',
             'header'  => "Content-Type: application/json\\r\\n",
             'content' => $payload,
+            'timeout' => 5, // ⏱️ Timeout tối đa 5 giây
         ]
     ]);
 
-    $result = file_get_contents('${BASE_URL}/v1/siteverify', false, $context);
-    if ($result === false) return ['success' => false];
+    try {
+        $result = @file_get_contents('${BASE_URL}/v1/siteverify', false, $context);
+        if ($result === false) {
+            // 🛡️ Fallback: Treo > 5s hoặc lỗi mạng -> Ưu tiên pass trong giai đoạn thử nghiệm
+            error_log('[NhanHoaCaptcha] Timeout > 5s or connection error, fail-open applied.');
+            return ['success' => true, 'fallback' => true];
+        }
 
-    return json_decode($result, true) ?: ['success' => false];
+        $data = json_decode($result, true);
+        return $data ?: ['success' => true, 'fallback' => true];
+    } catch (\\Throwable $e) {
+        return ['success' => true, 'fallback' => true];
+    }
 }
 
 // Trong form handler:
@@ -452,15 +533,25 @@ if (empty($verify['success'])) {
                   <CodeBlock lang="python" code={`import requests, os
 
 def verify_vina_captcha(vina_token: str) -> dict:
-    resp = requests.post(
-        '${BASE_URL}/v1/siteverify',
-        json={
-            'secret': os.environ.get('VINACAPTCHA_SECRET_KEY'), # cap_live_...
-            'verify_token': vina_token,
-        },
-        timeout=5
-    )
-    return resp.json()
+    try:
+        resp = requests.post(
+            '${BASE_URL}/v1/siteverify',
+            json={
+                'secret': os.environ.get('VINACAPTCHA_SECRET_KEY'), # cap_live_...
+                'verify_token': vina_token,
+            },
+            timeout=5 # ⏱️ Timeout 5 giây
+        )
+        if resp.status_code >= 500:
+            return {'success': True, 'fallback': True}
+        return resp.json()
+    except requests.exceptions.Timeout:
+        # 🛡️ Fallback: Hệ thống treo > 5s -> Ưu tiên cho pass trong giai đoạn thử nghiệm
+        print('[NhanHoaCaptcha] Timeout > 5s, ưu tiên pass trong lúc thử nghiệm.')
+        return {'success': True, 'fallback': True}
+    except Exception as e:
+        print(f'[NhanHoaCaptcha] Lỗi kết nối: {e}, fail-open fallback.')
+        return {'success': True, 'fallback': True}
 
 # Django/Flask view:
 @app.route('/login', methods=['POST'])
@@ -641,6 +732,15 @@ Content-Type: application/json
   "timestamp": "2026-09-11T11:00:00.000Z"
 }
 
+// Thử nghiệm / Fallback khi hệ thống bận:
+{
+  "success": true,
+  "score": 0,
+  "risk_level": "low",
+  "fallback": true,
+  "warning": "system_busy_trial_fallback"
+}
+
 // Đã dùng / không hợp lệ:
 {
   "success": false,
@@ -648,6 +748,12 @@ Content-Type: application/json
 }`} />
               </Col>
             </Row>
+            <Alert
+              type="info"
+              showIcon
+              message="Khuyến nghị tích hợp: Cài đặt HTTP client timeout 5000ms (5 giây). Nếu xảy ra timeout hoặc máy chủ trả mã lỗi 5xx trong giai đoạn thử nghiệm, backend khách nên ưu tiên gán { success: true } để không chặn người dùng thật."
+              style={{ marginTop: 12 }}
+            />
           </EndpointCard>
 
           <Card variant="borderless" style={{ border: "1px solid rgba(0,0,0,0.06)" }}>

@@ -139,6 +139,19 @@ Máy chủ backend của khách hàng gọi sang NhanHoaCaptcha để đối so�
 - `risk_level`: `"low"` (0–29) | `"medium"` (30–69) | `"high"` (70–100).
 - `verify_token` chỉ dùng được duy nhất 1 lần (One-Time Token trong Redis) — gọi lần 2 sẽ trả về `success: false, reason: "already_used"`.
 
+**Response 200 — Thử nghiệm & Fallback khi máy chủ bận / Timeout**
+```json
+{
+  "success": true,
+  "score": 0,
+  "risk_level": "low",
+  "fallback": true,
+  "warning": "system_busy_trial_fallback",
+  "timestamp": "2026-09-11T11:00:00.000Z",
+  "hostname": "unknown"
+}
+```
+
 **Response — Thất bại**
 ```json
 {
@@ -153,6 +166,10 @@ hoặc
   "reason": "already_used"
 }
 ```
+
+> **🛡️ Khuyến nghị tích hợp phía Client Backend (Fail-Open Fallback)**:
+> - Cài đặt **Timeout tối đa 5000ms (5 giây)** cho request gọi `/v1/siteverify`.
+> - Trong giai đoạn thử nghiệm (Testing/Trial Phase), nếu request bị quá hạn 5s hoặc server captcha trả mã lỗi 5xx, backend khách nên **ưu tiên cho pass (`success: true`)** để không làm gián đoạn trải nghiệm hoặc chặn khách hàng thật.
 
 ---
 

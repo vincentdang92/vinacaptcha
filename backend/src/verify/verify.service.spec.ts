@@ -181,5 +181,14 @@ describe('VerifyService', () => {
       expect(result.risk_level).toBe('low');
       expect(result.hostname).toBe('example.com');
     });
+
+    it('should fallback to success if unexpected database error occurs during trial', async () => {
+      mockDataSource.query.mockRejectedValue(new Error('DB Connection Timeout'));
+
+      const result = await service.siteVerify({ secret: 'any_key', verify_token: 'any_token' });
+      expect(result.success).toBe(true);
+      expect((result as any).fallback).toBe(true);
+      expect((result as any).warning).toBe('system_busy_trial_fallback');
+    });
   });
 });
