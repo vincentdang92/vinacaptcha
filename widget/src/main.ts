@@ -788,6 +788,9 @@ class VinaCaptcha {
   }
 }
 
-// Export ra global scope
-(window as any).VinaCaptcha = VinaCaptcha;
-export { VinaCaptcha };
+// Gán trực tiếp vào global window
+if (typeof window !== 'undefined') {
+  (window as any).VinaCaptcha = VinaCaptcha;
+}
+export default VinaCaptcha;
+

@@ -8,6 +8,12 @@ export default defineConfig({
       fileName: () => 'vina-captcha.js',
       formats: ['iife'],
     },
+    rollupOptions: {
+      output: {
+        extend: true,
+        exports: 'default',
+      },
+    },
     target: 'es2015',
     minify: true,
   },
