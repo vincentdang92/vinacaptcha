@@ -46,14 +46,20 @@ function getDefaultBaseUrl(): string {
   return typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:3068';
 }
 
-// ─── Global Telemetry Tracker (reCAPTCHA v3 Drop-in Interaction Engine) ────────
+// ─── Global Telemetry & Marketing Analytics Engine (Zero-Friction / Passive) ──
 let globalMouseMoves = 0;
 let globalMouseClicks = 0;
 let globalKeyStrokes = 0;
+let globalPasteCount = 0;
+let globalTabSwitchCount = 0;
+let globalMaxScrollPct = 0;
+let globalFirstInputFocusTime: number | null = null;
 let globalTicking = false;
+let globalScrollTicking = false;
 const globalScriptStartTime = Date.now();
 
 if (typeof window !== 'undefined') {
+  // 1. Mouse movements
   window.addEventListener('mousemove', () => {
     if (!globalTicking) {
       window.requestAnimationFrame(() => {
@@ -64,12 +70,80 @@ if (typeof window !== 'undefined') {
     }
   }, { passive: true });
 
-  window.addEventListener('click', () => {
+  // 2. Mouse clicks
+  window.addEventListener('click', (e) => {
     globalMouseClicks++;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+      if (globalFirstInputFocusTime === null) {
+        globalFirstInputFocusTime = Date.now();
+      }
+    }
   }, { passive: true });
 
-  window.addEventListener('keydown', () => {
+  // 3. Keystrokes
+  window.addEventListener('keydown', (e) => {
     globalKeyStrokes++;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+      if (globalFirstInputFocusTime === null) {
+        globalFirstInputFocusTime = Date.now();
+      }
+    }
+  }, { passive: true });
+
+  // 4. Paste detection
+  window.addEventListener('paste', () => {
+    globalPasteCount++;
+  }, { passive: true });
+
+  // 5. Tab switching (Page Visibility)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        globalTabSwitchCount++;
+      }
+    }, { passive: true });
+
+    // Focus on inputs
+    document.addEventListener('focusin', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        if (globalFirstInputFocusTime === null) {
+          globalFirstInputFocusTime = Date.now();
+        }
+      }
+    }, { passive: true });
+  }
+
+  // 6. Scroll depth tracking
+  const updateScrollDepth = () => {
+    if (typeof document === 'undefined') return;
+    const docHeight = Math.max(
+      document.body?.scrollHeight || 0,
+      document.documentElement?.scrollHeight || 0,
+      document.body?.offsetHeight || 0,
+      document.documentElement?.offsetHeight || 0,
+      document.body?.clientHeight || 0,
+      document.documentElement?.clientHeight || 0
+    );
+    const winHeight = window.innerHeight || 800;
+    const scrollable = docHeight - winHeight;
+    const currentScroll = window.scrollY || window.pageYOffset || 0;
+    const pct = scrollable > 0 ? Math.min(100, Math.round((currentScroll / scrollable) * 100)) : 100;
+    if (pct > globalMaxScrollPct) {
+      globalMaxScrollPct = pct;
+    }
+  };
+
+  window.addEventListener('scroll', () => {
+    if (!globalScrollTicking) {
+      window.requestAnimationFrame(() => {
+        updateScrollDepth();
+        globalScrollTicking = false;
+      });
+      globalScrollTicking = true;
+    }
   }, { passive: true });
 }
 
@@ -78,6 +152,88 @@ function getGlobalTimeOnPageMs(): number {
     return Math.round(performance.now());
   }
   return Date.now() - globalScriptStartTime;
+}
+
+function getUnmaskedGpuRenderer(): string {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || (canvas.getContext('experimental-webgl') as WebGLRenderingContext | null);
+    if (!gl) return 'unsupported';
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!debugInfo) return 'unknown';
+    return gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'unknown';
+  } catch {
+    return 'error';
+  }
+}
+
+function parseMarketingParams(): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (typeof window === 'undefined' || !window.location) return params;
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    for (const key of utmKeys) {
+      const val = searchParams.get(key);
+      if (val) params[key] = val.substring(0, 100);
+    }
+  } catch {}
+  return params;
+}
+
+function collectClientTelemetry(customSignals?: any) {
+  const nav = typeof navigator !== 'undefined' ? (navigator as any) : {};
+  const scr = typeof window !== 'undefined' && window.screen ? window.screen : ({} as any);
+
+  let timezone = 'UTC';
+  let timezoneOffset = 0;
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    timezoneOffset = new Date().getTimezoneOffset();
+  } catch {}
+
+  const utm = parseMarketingParams();
+  const formFocusDelayMs = globalFirstInputFocusTime !== null ? Math.max(0, globalFirstInputFocusTime - globalScriptStartTime) : undefined;
+
+  return {
+    // Core Security & Timing
+    webdriver: nav.webdriver || false,
+    time_on_page_ms: getGlobalTimeOnPageMs(),
+    mouse_moves: globalMouseMoves,
+    mouse_clicks: globalMouseClicks,
+    key_strokes: globalKeyStrokes,
+    paste_detected: globalPasteCount > 0,
+    tab_switch_count: globalTabSwitchCount,
+    scroll_depth_pct: globalMaxScrollPct,
+    form_focus_delay_ms: formFocusDelayMs,
+
+    // Device & Screen
+    screen_width: scr.width || 0,
+    screen_height: scr.height || 0,
+    color_depth: scr.colorDepth || 24,
+    pixel_ratio: typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1,
+    device_memory: nav.deviceMemory || undefined,
+    hardware_concurrency: nav.hardwareConcurrency || undefined,
+    touch_support: nav.maxTouchPoints > 0,
+    gpu_renderer: getUnmaskedGpuRenderer(),
+
+    // Localization
+    timezone,
+    timezone_offset: timezoneOffset,
+    languages: nav.languages ? Array.from(nav.languages).slice(0, 5) : (nav.language ? [nav.language] : ['vi-VN']),
+
+    // Network
+    connection_type: nav.connection?.effectiveType || undefined,
+    rtt_ms: nav.connection?.rtt || undefined,
+
+    // Marketing Attribution
+    referrer: typeof document !== 'undefined' && document.referrer ? document.referrer.substring(0, 250) : undefined,
+    landing_path: typeof window !== 'undefined' && window.location ? window.location.pathname.substring(0, 150) : undefined,
+    ...utm,
+
+    ...(customSignals || {}),
+  };
 }
 
 class NhanHoaCaptcha {
@@ -692,7 +848,7 @@ class NhanHoaCaptcha {
     this.setBadgeState('loading');
 
     const clientSignals = {
-      webdriver: navigator.webdriver || false,
+      ...collectClientTelemetry(),
       canvas_fingerprint: this.getCanvasFingerprint(),
       time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
       mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
@@ -823,13 +979,12 @@ class NhanHoaCaptcha {
     this.setBadgeState('loading');
 
     const clientSignals = {
-      webdriver: navigator.webdriver || false,
+      ...collectClientTelemetry(options?.customSignals),
       canvas_fingerprint: this.getCanvasFingerprint(),
       time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
       mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
       mouse_clicks: Math.max(this.mouseClicks, globalMouseClicks),
       key_strokes: Math.max(this.keyStrokes, globalKeyStrokes),
-      ...(options?.customSignals || {}),
     };
 
     let clientReportedIp: string | undefined;

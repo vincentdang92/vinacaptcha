@@ -68,6 +68,67 @@ export class AdminService {
         failed: parseInt(item.failed, 10) || 0,
       }));
 
+      // Marketing & Device Analytics
+      let utmCampaigns: Array<{ campaign: string; source: string; total: number; passCount: number; failCount: number }> = [];
+      let topDevices = { mobile: 0, desktop: 0, touchScreenPct: 0 };
+      let avgMetrics = { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 };
+
+      try {
+        const marketingQuery = await this.dataSource.query(`
+          SELECT 
+            COALESCE(vl.risk_breakdown->'clientSignals'->>'utm_campaign', 'Direct / Organic') AS campaign,
+            COALESCE(vl.risk_breakdown->'clientSignals'->>'utm_source', 'Direct') AS source,
+            COUNT(*) as total,
+            SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END) as pass_count,
+            SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END) as fail_count
+          FROM verification_logs vl
+          JOIN sites s ON s.id = vl.site_id
+          WHERE s.account_id = $1 AND vl.risk_breakdown IS NOT NULL
+          GROUP BY campaign, source
+          ORDER BY total DESC
+          LIMIT 8
+        `, [accountId]);
+
+        utmCampaigns = (marketingQuery || []).map((m: any) => ({
+          campaign: m.campaign || 'Direct / Organic',
+          source: m.source || 'Direct',
+          total: parseInt(m.total, 10) || 0,
+          passCount: parseInt(m.pass_count, 10) || 0,
+          failCount: parseInt(m.fail_count, 10) || 0,
+        }));
+      } catch {}
+
+      try {
+        const deviceQuery = await this.dataSource.query(`
+          SELECT 
+            COUNT(*) as total_samples,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'touch_support')::boolean = true THEN 1 ELSE 0 END) as touch_count,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'screen_width')::int < 768 THEN 1 ELSE 0 END) as mobile_count,
+            AVG(COALESCE((vl.risk_breakdown->'clientSignals'->>'time_on_page_ms')::numeric, 0)) as avg_time,
+            AVG(COALESCE((vl.risk_breakdown->'clientSignals'->>'scroll_depth_pct')::numeric, 0)) as avg_scroll,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'paste_detected')::boolean = true THEN 1 ELSE 0 END) as paste_count
+          FROM verification_logs vl
+          JOIN sites s ON s.id = vl.site_id
+          WHERE s.account_id = $1 AND vl.risk_breakdown IS NOT NULL
+        `, [accountId]);
+
+        if (deviceQuery && deviceQuery.length > 0 && deviceQuery[0].total_samples > 0) {
+          const total = parseInt(deviceQuery[0].total_samples, 10) || 1;
+          const mobile = parseInt(deviceQuery[0].mobile_count, 10) || 0;
+          const touch = parseInt(deviceQuery[0].touch_count, 10) || 0;
+          topDevices = {
+            mobile,
+            desktop: Math.max(0, total - mobile),
+            touchScreenPct: Math.round((touch / total) * 100),
+          };
+          avgMetrics = {
+            avgTimeOnPageMs: Math.round(parseFloat(deviceQuery[0].avg_time) || 0),
+            avgScrollDepthPct: Math.round(parseFloat(deviceQuery[0].avg_scroll) || 0),
+            pasteDetectedCount: parseInt(deviceQuery[0].paste_count, 10) || 0,
+          };
+        }
+      } catch {}
+
       return {
         totalSites: parseInt(totalSitesRes[0]?.count || '0', 10),
         activeSites: parseInt(activeSitesRes[0]?.count || '0', 10),
@@ -76,6 +137,11 @@ export class AdminService {
         bannedIps: parseInt(bannedIpsRes[0]?.count || '0', 10),
         recentLogs: recentLogs || [],
         chartData: formattedChartData,
+        marketingStats: {
+          utmCampaigns,
+          deviceBreakdown: topDevices,
+          userEngagement: avgMetrics,
+        },
         last_synced_at: new Date().toISOString(),
       };
     }
@@ -126,6 +192,65 @@ export class AdminService {
       failed: parseInt(item.failed, 10) || 0,
     }));
 
+    // Marketing & Device Analytics (Admin level)
+    let utmCampaigns: Array<{ campaign: string; source: string; total: number; passCount: number; failCount: number }> = [];
+    let topDevices = { mobile: 0, desktop: 0, touchScreenPct: 0 };
+    let avgMetrics = { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 };
+
+    try {
+      const marketingQuery = await this.dataSource.query(`
+        SELECT 
+          COALESCE(vl.risk_breakdown->'clientSignals'->>'utm_campaign', 'Direct / Organic') AS campaign,
+          COALESCE(vl.risk_breakdown->'clientSignals'->>'utm_source', 'Direct') AS source,
+          COUNT(*) as total,
+          SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END) as pass_count,
+          SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END) as fail_count
+        FROM verification_logs vl
+        WHERE vl.risk_breakdown IS NOT NULL
+        GROUP BY campaign, source
+        ORDER BY total DESC
+        LIMIT 8
+      `);
+
+      utmCampaigns = (marketingQuery || []).map((m: any) => ({
+        campaign: m.campaign || 'Direct / Organic',
+        source: m.source || 'Direct',
+        total: parseInt(m.total, 10) || 0,
+        passCount: parseInt(m.pass_count, 10) || 0,
+        failCount: parseInt(m.fail_count, 10) || 0,
+      }));
+    } catch {}
+
+    try {
+      const deviceQuery = await this.dataSource.query(`
+        SELECT 
+          COUNT(*) as total_samples,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'touch_support')::boolean = true THEN 1 ELSE 0 END) as touch_count,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'screen_width')::int < 768 THEN 1 ELSE 0 END) as mobile_count,
+          AVG(COALESCE((vl.risk_breakdown->'clientSignals'->>'time_on_page_ms')::numeric, 0)) as avg_time,
+          AVG(COALESCE((vl.risk_breakdown->'clientSignals'->>'scroll_depth_pct')::numeric, 0)) as avg_scroll,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'paste_detected')::boolean = true THEN 1 ELSE 0 END) as paste_count
+        FROM verification_logs vl
+        WHERE vl.risk_breakdown IS NOT NULL
+      `);
+
+      if (deviceQuery && deviceQuery.length > 0 && deviceQuery[0].total_samples > 0) {
+        const total = parseInt(deviceQuery[0].total_samples, 10) || 1;
+        const mobile = parseInt(deviceQuery[0].mobile_count, 10) || 0;
+        const touch = parseInt(deviceQuery[0].touch_count, 10) || 0;
+        topDevices = {
+          mobile,
+          desktop: Math.max(0, total - mobile),
+          touchScreenPct: Math.round((touch / total) * 100),
+        };
+        avgMetrics = {
+          avgTimeOnPageMs: Math.round(parseFloat(deviceQuery[0].avg_time) || 0),
+          avgScrollDepthPct: Math.round(parseFloat(deviceQuery[0].avg_scroll) || 0),
+          pasteDetectedCount: parseInt(deviceQuery[0].paste_count, 10) || 0,
+        };
+      }
+    } catch {}
+
     const result = {
       totalSites: parseInt(totalSitesRes[0]?.count || '0', 10),
       activeSites: parseInt(activeSitesRes[0]?.count || '0', 10),
@@ -134,6 +259,11 @@ export class AdminService {
       bannedIps: parseInt(bannedIpsRes[0]?.count || '0', 10),
       recentLogs: recentLogs || [],
       chartData: formattedChartData,
+      marketingStats: {
+        utmCampaigns,
+        deviceBreakdown: topDevices,
+        userEngagement: avgMetrics,
+      },
       last_synced_at: new Date().toISOString(),
     };
 

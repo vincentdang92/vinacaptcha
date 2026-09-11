@@ -1,5 +1,14 @@
-import { Row, Col, Card, Typography, Table, Spin, Tag, Tooltip } from "antd";
-import { UserOutlined, GlobalOutlined, ClockCircleOutlined, StopOutlined } from "@ant-design/icons";
+import { Row, Col, Card, Typography, Table, Spin, Tag, Tooltip, Progress } from "antd";
+import { 
+  UserOutlined, 
+  GlobalOutlined, 
+  ClockCircleOutlined, 
+  StopOutlined,
+  CompassOutlined,
+  MobileOutlined,
+  LaptopOutlined,
+  ThunderboltOutlined
+} from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../../config";
@@ -28,6 +37,11 @@ interface StatsData {
     passed: number;
     failed: number;
   }>;
+  marketingStats?: {
+    utmCampaigns: Array<{ campaign: string; source: string; total: number; passCount: number; failCount: number }>;
+    deviceBreakdown: { mobile: number; desktop: number; touchScreenPct: number };
+    userEngagement: { avgTimeOnPageMs: number; avgScrollDepthPct: number; pasteDetectedCount: number };
+  };
 }
 
 const defaultStats: StatsData = {
@@ -38,6 +52,11 @@ const defaultStats: StatsData = {
   bannedIps: 0,
   recentLogs: [],
   chartData: [],
+  marketingStats: {
+    utmCampaigns: [],
+    deviceBreakdown: { mobile: 0, desktop: 0, touchScreenPct: 0 },
+    userEngagement: { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 },
+  },
 };
 
 export const DashboardPage = () => {
@@ -66,6 +85,11 @@ export const DashboardPage = () => {
               bannedIps: Number(data.bannedIps) || 0,
               recentLogs: Array.isArray(data.recentLogs) ? data.recentLogs : [],
               chartData: Array.isArray(data.chartData) ? data.chartData : [],
+              marketingStats: data.marketingStats || {
+                utmCampaigns: [],
+                deviceBreakdown: { mobile: 0, desktop: 0, touchScreenPct: 0 },
+                userEngagement: { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 },
+              },
             });
             setLoading(false);
           }
@@ -289,7 +313,146 @@ export const DashboardPage = () => {
         </Col>
       </Row>
 
-      {/* Row 3: Table Full Width */}
+      {/* Row 3: Marketing & UX Intelligence Analytics */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        {/* Col 1: UTM Campaign & Ad Fraud Monitor */}
+        <Col xs={24} lg={14}>
+          <Card
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CompassOutlined style={{ color: '#7367f0' }} />
+                <Text style={{ fontWeight: 600 }}>Chiến Dịch Ads & Giám Sát Click Tặc (UTM)</Text>
+              </div>
+            }
+            variant="borderless"
+            styles={{ body: { padding: 0 } }}
+            style={{ height: '100%' }}
+          >
+            <Table
+              dataSource={stats?.marketingStats?.utmCampaigns || []}
+              rowKey={(record) => record.campaign + record.source}
+              pagination={false}
+              size="small"
+              locale={{ emptyText: "Chưa ghi nhận traffic từ chiến dịch UTM nào" }}
+            >
+              <Table.Column
+                title="Chiến Dịch / Nguồn"
+                render={(_: any, r: any) => (
+                  <div>
+                    <Text strong style={{ fontSize: 13 }}>{r.campaign}</Text>
+                    <div><Tag color="geekblue" style={{ fontSize: 10, margin: 0 }}>{r.source}</Tag></div>
+                  </div>
+                )}
+              />
+              <Table.Column
+                title="Lượt Submit"
+                dataIndex="total"
+                align="center"
+                render={(total: number) => <Text strong>{total}</Text>}
+              />
+              <Table.Column
+                title="Tỉ Lệ Pass"
+                render={(_: any, r: any) => {
+                  const passRate = r.total > 0 ? Math.round((r.passCount / r.total) * 100) : 0;
+                  return (
+                    <div style={{ width: 90 }}>
+                      <Progress percent={passRate} size="small" strokeColor="#28c76f" />
+                    </div>
+                  );
+                }}
+              />
+              <Table.Column
+                title="Tỉ Lệ Click Tặc"
+                render={(_: any, r: any) => {
+                  const fraudRate = r.total > 0 ? Math.round((r.failCount / r.total) * 100) : 0;
+                  const isHighFraud = fraudRate >= 30;
+                  return (
+                    <div>
+                      <Tag color={isHighFraud ? "error" : fraudRate > 10 ? "warning" : "success"}>
+                        {fraudRate}% Bot
+                      </Tag>
+                    </div>
+                  );
+                }}
+              />
+            </Table>
+          </Card>
+        </Col>
+
+        {/* Col 2: Device & CRO Interaction Intelligence */}
+        <Col xs={24} lg={10}>
+          <Card
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ThunderboltOutlined style={{ color: '#ff9f43' }} />
+                <Text style={{ fontWeight: 600 }}>Thiết Bị & Trải Nghiệm CRO</Text>
+              </div>
+            }
+            variant="borderless"
+            styles={{ body: { padding: "16px 20px" } }}
+            style={{ height: '100%' }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Mobile vs Desktop Split */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    <MobileOutlined /> Mobile ({stats?.marketingStats?.deviceBreakdown?.mobile || 0})
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    <LaptopOutlined /> Desktop ({stats?.marketingStats?.deviceBreakdown?.desktop || 0})
+                  </Text>
+                </div>
+                {(() => {
+                  const m = stats?.marketingStats?.deviceBreakdown?.mobile || 0;
+                  const d = stats?.marketingStats?.deviceBreakdown?.desktop || 0;
+                  const total = m + d;
+                  const mobilePct = total > 0 ? Math.round((m / total) * 100) : 50;
+                  return (
+                    <Progress
+                      percent={mobilePct}
+                      showInfo={false}
+                      strokeColor="#7367f0"
+                      trailColor="#00cfe8"
+                      size={["100%", 10]}
+                    />
+                  );
+                })()}
+              </div>
+
+              {/* Interaction Metrics Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>
+                <div style={{ backgroundColor: "rgba(115,103,240,0.06)", borderRadius: 8, padding: "10px 12px" }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>⏱️ TG Điền Form TB</Text>
+                  <Text strong style={{ fontSize: 16, color: "#7367f0" }}>
+                    {stats?.marketingStats?.userEngagement?.avgTimeOnPageMs ? `${(stats.marketingStats.userEngagement.avgTimeOnPageMs / 1000).toFixed(1)}s` : "—"}
+                  </Text>
+                </div>
+                <div style={{ backgroundColor: "rgba(40,199,111,0.06)", borderRadius: 8, padding: "10px 12px" }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📜 Độ Sâu Cuộn TB</Text>
+                  <Text strong style={{ fontSize: 16, color: "#28c76f" }}>
+                    {stats?.marketingStats?.userEngagement?.avgScrollDepthPct ? `${stats.marketingStats.userEngagement.avgScrollDepthPct}%` : "—"}
+                  </Text>
+                </div>
+                <div style={{ backgroundColor: "rgba(255,159,67,0.06)", borderRadius: 8, padding: "10px 12px" }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📋 Lượt Paste Form</Text>
+                  <Text strong style={{ fontSize: 16, color: "#ff9f43" }}>
+                    {stats?.marketingStats?.userEngagement?.pasteDetectedCount || 0}
+                  </Text>
+                </div>
+                <div style={{ backgroundColor: "rgba(0,207,232,0.06)", borderRadius: 8, padding: "10px 12px" }}>
+                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📱 Màn Hình Touch</Text>
+                  <Text strong style={{ fontSize: 16, color: "#00cfe8" }}>
+                    {stats?.marketingStats?.deviceBreakdown?.touchScreenPct ? `${stats.marketingStats.deviceBreakdown.touchScreenPct}%` : "—"}
+                  </Text>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Row 4: Table Full Width */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>
           <Card

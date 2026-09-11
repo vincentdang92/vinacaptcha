@@ -81,6 +81,36 @@ export class RiskEngineService {
       clientBehaviorScore += 15;
     }
 
+    // Phát hiện GPU ảo / Môi trường headless server (SwiftShader, llvmpipe, Mesa, VirtualBox, VMware)
+    if (signals.gpu_renderer) {
+      const lowerGpu = signals.gpu_renderer.toLowerCase();
+      if (
+        lowerGpu.includes('swiftshader') ||
+        lowerGpu.includes('llvmpipe') ||
+        lowerGpu.includes('mesa') ||
+        lowerGpu.includes('virtualbox') ||
+        lowerGpu.includes('vmware') ||
+        lowerGpu.includes('software rasterizer')
+      ) {
+        clientBehaviorScore += 45;
+      }
+    }
+
+    // Mâu thuẫn phần cứng (VD: màn hình ảo 0x0)
+    if (signals.screen_width === 0 || signals.screen_height === 0) {
+      clientBehaviorScore += 20;
+    }
+
+    // Điểm thưởng tương tác tự nhiên (giảm false-positive cho người dùng thật)
+    const hasRichInteraction =
+      (signals.mouse_moves ?? 0) > 10 &&
+      (signals.key_strokes ?? 0) > 3 &&
+      (signals.time_on_page_ms ?? 0) > 2500;
+
+    if (hasRichInteraction && clientBehaviorScore > 0) {
+      clientBehaviorScore = Math.max(0, clientBehaviorScore - 10);
+    }
+
     // ==========================================
     // 2. CHẤM ĐIỂM THREAT INTEL (Nguồn IP uy tín)
     // ==========================================

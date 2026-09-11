@@ -24,6 +24,106 @@ export class ClientSignalsDto {
   @IsOptional()
   @IsString()
   action?: string;
+
+  // UX & CRO Interaction Signals
+  @IsOptional()
+  @IsBoolean()
+  paste_detected?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  tab_switch_count?: number;
+
+  @IsOptional()
+  @IsNumber()
+  scroll_depth_pct?: number;
+
+  @IsOptional()
+  @IsNumber()
+  form_focus_delay_ms?: number;
+
+  // Device & Screen Environment
+  @IsOptional()
+  @IsNumber()
+  screen_width?: number;
+
+  @IsOptional()
+  @IsNumber()
+  screen_height?: number;
+
+  @IsOptional()
+  @IsNumber()
+  color_depth?: number;
+
+  @IsOptional()
+  @IsNumber()
+  pixel_ratio?: number;
+
+  @IsOptional()
+  @IsNumber()
+  device_memory?: number;
+
+  @IsOptional()
+  @IsNumber()
+  hardware_concurrency?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  touch_support?: boolean;
+
+  @IsOptional()
+  @IsString()
+  gpu_renderer?: string;
+
+  // Localization & Region
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsNumber()
+  timezone_offset?: number;
+
+  @IsOptional()
+  languages?: string[];
+
+  // Network Performance
+  @IsOptional()
+  @IsString()
+  connection_type?: string;
+
+  @IsOptional()
+  @IsNumber()
+  rtt_ms?: number;
+
+  // Marketing Attribution
+  @IsOptional()
+  @IsString()
+  referrer?: string;
+
+  @IsOptional()
+  @IsString()
+  landing_path?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_source?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_medium?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_campaign?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_term?: string;
+
+  @IsOptional()
+  @IsString()
+  utm_content?: string;
 }
 
 export class IssueTokenDto {
