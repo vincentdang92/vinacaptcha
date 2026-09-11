@@ -18,11 +18,11 @@ export class IssueService {
     let metadata = await this.redisService.getApiKeyMetadataCache(apiKey);
 
     if (!metadata) {
-      const apiKeyRes = await this.dataSource.query(
+      const siteRes = await this.dataSource.query(
         `
         SELECT 
           k.id as key_id, 
-          k.site_id, 
+          s.id as site_id, 
           k.revoked_at,
           s.account_id,
           s.platform,
@@ -30,22 +30,23 @@ export class IssueService {
           s.allowed_domains,
           COALESCE(s.challenge_mode, 'auto') as challenge_mode,
           COALESCE(p.max_requests, 10000) as max_requests
-        FROM api_keys k
-        JOIN sites s ON s.id = k.site_id
+        FROM sites s
         JOIN accounts a ON a.id = s.account_id
         LEFT JOIN plans p ON p.id = a.plan_id
-        WHERE k.key_prefix = $1
+        LEFT JOIN api_keys k ON k.site_id = s.id AND k.revoked_at IS NULL
+        WHERE (s.id::text = $1 OR k.key_prefix = $1) AND s.status = 'active'
+        LIMIT 1
         `,
         [apiKey],
       );
 
-      if (!apiKeyRes || apiKeyRes.length === 0 || apiKeyRes[0].revoked_at !== null) {
+      if (!siteRes || siteRes.length === 0 || (siteRes[0].revoked_at !== null && siteRes[0].revoked_at !== undefined)) {
         throw new UnauthorizedException({
-          error: { code: 'invalid_api_key', message: 'API key không hợp lệ hoặc đã bị vô hiệu hóa' },
+          error: { code: 'invalid_site_key', message: 'Site Key hoặc API Key không hợp lệ hoặc trang web đã bị vô hiệu hóa' },
         });
       }
 
-      metadata = apiKeyRes[0];
+      metadata = siteRes[0];
       // Cache metadata 5 phút vào Redis để giải phóng hoàn toàn truy vấn Postgres cho các request sau
       await this.redisService.setApiKeyMetadataCache(apiKey, metadata, 300);
     }

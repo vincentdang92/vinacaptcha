@@ -12,13 +12,15 @@ export class IssueController {
   @HttpCode(HttpStatus.OK)
   async issueToken(
     @Headers('x-api-key') apiKey: string,
+    @Headers('x-site-key') siteKeyHeader: string,
     @Headers('x-forwarded-for') forwardedFor: string,
     @Body() dto: IssueTokenDto,
     @Ip() rawIp: string,
   ) {
-    if (!apiKey) {
+    const key = siteKeyHeader || apiKey;
+    if (!key) {
       throw new UnauthorizedException({
-        error: { code: 'missing_api_key', message: 'Missing API Key in headers' }
+        error: { code: 'missing_site_key', message: 'Thiếu Site Key trong headers (X-Site-Key hoặc X-Api-Key)' }
       });
     }
 
@@ -37,6 +39,6 @@ export class IssueController {
       clientIp = reportedIp;
     }
 
-    return this.issueService.issueToken(apiKey, dto, clientIp);
+    return this.issueService.issueToken(key, dto, clientIp);
   }
 }

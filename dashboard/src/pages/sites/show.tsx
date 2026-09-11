@@ -49,8 +49,8 @@ export const SiteShow = ({
                 <div style={{ fontWeight: 500, fontSize: "15px" }}>{record?.primary_domain || "N/A"}</div>
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: "12px", textTransform: "uppercase" }}>Site ID (UUID)</Text>
-                <div style={{ fontFamily: "monospace", color: "#7367f0", background: "rgba(115,103,240,0.1)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", marginTop: "4px" }}>
+                <Text type="secondary" style={{ fontSize: "12px", textTransform: "uppercase" }}>Khóa Site Key (Public Client)</Text>
+                <div style={{ fontFamily: "monospace", color: "#166534", background: "rgba(34, 197, 94, 0.1)", padding: "4px 8px", borderRadius: "4px", display: "inline-block", marginTop: "4px", fontWeight: 600 }}>
                   {record?.id || "N/A"}
                 </div>
               </div>
@@ -85,8 +85,8 @@ export const SiteShow = ({
             styles={{ body: { padding: "24px" } }}
             title={
               <Space>
-                <KeyOutlined style={{ color: "#7367f0" }} />
-                <span style={{ fontWeight: 600 }}>API Keys</span>
+                <KeyOutlined style={{ color: "#e11d48" }} />
+                <span style={{ fontWeight: 600 }}>Khóa API Bí Mật (Server Secret Keys)</span>
               </Space>
             }
           >

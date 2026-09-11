@@ -573,7 +573,11 @@ class VinaCaptcha {
       // ① /v1/issue — nhận risk score & loại thử thách
       const issueRes = await fetch(`${this.config.baseUrl}/v1/issue`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.config.siteKey },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-Site-Key': this.config.siteKey,
+          'X-Api-Key': this.config.siteKey,
+        },
         body: JSON.stringify({
           domain: window.location.hostname,
           honeypot_filled: honeypot.value.length > 0,
@@ -695,7 +699,11 @@ class VinaCaptcha {
     try {
       const issueRes = await fetch(`${this.config.baseUrl}/v1/issue`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': this.config.siteKey },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'X-Site-Key': this.config.siteKey,
+          'X-Api-Key': this.config.siteKey,
+        },
         body: JSON.stringify({
           domain: window.location.hostname,
           honeypot_filled: false,

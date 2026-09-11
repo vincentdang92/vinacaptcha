@@ -318,21 +318,21 @@ export const SiteList = () => {
 
           <Table.Column
             dataIndex="id"
-            title="SITE ID (UUID)"
+            title="SITE KEY (PUBLIC)"
             render={(id: string) => (
               <Space size="small">
                 <Text
                   code
-                  style={{ fontSize: "12px", color: "#878a99", maxWidth: 120, display: "inline-block" }}
+                  style={{ fontSize: "12px", color: "#166534", backgroundColor: "#f0fdf4", maxWidth: 120, display: "inline-block", fontWeight: 600 }}
                   ellipsis={{ tooltip: id }}
                 >
                   {id}
                 </Text>
-                <Tooltip title="Sao chép Site ID">
+                <Tooltip title="Sao chép Public Site Key (cho HTML/JS Client)">
                   <Button
                     type="text"
                     size="small"
-                    icon={<CopyOutlined style={{ fontSize: 12, color: "#878a99" }} />}
+                    icon={<CopyOutlined style={{ fontSize: 12, color: "#16a34a" }} />}
                     onClick={() => handleCopy(id)}
                   />
                 </Tooltip>
