@@ -29,7 +29,7 @@ export class AdminController {
     if (!body?.email || !body?.password) {
       throw new BadRequestException('Email và mật khẩu là bắt buộc');
     }
-    return this.adminService.login(body.email, body.password);
+    return this.adminService.login(body.email, body.password, body.captcha_token);
   }
 
   @Post('auth/register')
@@ -41,7 +41,7 @@ export class AdminController {
     const host = req.headers['x-forwarded-host'] || req.headers['host'];
     const requestBaseUrl = host ? `${proto}://${host}` : undefined;
 
-    return this.adminService.register(body.email, body.password, body.name, requestBaseUrl);
+    return this.adminService.register(body.email, body.password, body.name, requestBaseUrl, body.captcha_token);
   }
 
   @Get('auth/activate')

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Site } from './entities/site.entity.js';
@@ -7,6 +7,7 @@ import { Account } from './entities/account.entity.js';
 import { Plan } from './entities/plan.entity.js';
 import { RedisService } from '../redis/redis.service.js';
 import { MailService } from '../mail/mail.service.js';
+import { VerifyService } from '../verify/verify.service.js';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class AdminService {
     private dataSource: DataSource,
     private redisService: RedisService,
     private mailService: MailService,
+    @Optional() private verifyService?: VerifyService,
   ) {}
 
   async getDashboardStats(accountId?: string, role?: string) {
@@ -407,7 +409,33 @@ export class AdminService {
     };
   }
 
-  async register(email: string, password: string, name: string, requestBaseUrl?: string) {
+  async verifyAuthCaptcha(captchaToken?: string) {
+    if (!captchaToken) {
+      if (process.env.AUTH_CAPTCHA_REQUIRED === 'true') {
+        throw new BadRequestException('Vui lòng hoàn thành xác thực Slider Captcha trước khi tiếp tục.');
+      }
+      return true;
+    }
+
+    if (!this.verifyService) {
+      return true;
+    }
+
+    const secret = process.env.AUTH_CAPTCHA_SECRET || 'cap_live_6f1a95f9fedee61651fae43c';
+    const result = await this.verifyService.siteVerify({
+      secret,
+      verify_token: captchaToken,
+    });
+
+    if (!result.success) {
+      throw new BadRequestException(`Xác thực Slider Captcha không hợp lệ (${result.reason || 'failed'}). Vui lòng thử lại.`);
+    }
+    return true;
+  }
+
+  async register(email: string, password: string, name: string, requestBaseUrl?: string, captchaToken?: string) {
+    await this.verifyAuthCaptcha(captchaToken);
+
     const cleanEmail = email?.trim().toLowerCase();
     const existing = await this.accountsRepo.findOneBy({ email: cleanEmail });
     if (existing) {
@@ -475,7 +503,9 @@ export class AdminService {
     return { success: true, message: 'Tài khoản đã được kích hoạt thành công.' };
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, captchaToken?: string) {
+    await this.verifyAuthCaptcha(captchaToken);
+
     const cleanEmail = email?.trim().toLowerCase();
     const acc = await this.accountsRepo.findOneBy({ email: cleanEmail });
     if (!acc) {

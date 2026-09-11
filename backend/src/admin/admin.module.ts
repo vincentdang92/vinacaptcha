@@ -7,13 +7,16 @@ import { Site } from './entities/site.entity.js';
 import { ApiKey } from './entities/api-key.entity.js';
 import { Plan } from './entities/plan.entity.js';
 import { ThreatIntelModule } from '../threat-intel/threat-intel.module.js';
+import { VerifyModule } from '../verify/verify.module.js';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Account, Site, ApiKey, Plan]),
     ThreatIntelModule,
+    VerifyModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],
 })
 export class AdminModule {}
+

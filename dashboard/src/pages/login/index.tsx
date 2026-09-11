@@ -6,6 +6,7 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../auth/AuthLayout";
 import axios from "axios";
 import { API_BASE_URL } from "../../config";
+import { executeSliderCaptcha } from "../../utils/captcha";
 
 const { Title, Text } = Typography;
 
@@ -13,6 +14,7 @@ export const LoginPage = () => {
   const [form] = Form.useForm();
   const [searchParams] = useSearchParams();
   const [errorMessage, setErrorMessage] = useState("");
+  const [verifyingCaptcha, setVerifyingCaptcha] = useState(false);
   const navigate = useNavigate();
   const loginResult = useLogin() as any;
   const { mutate: login } = loginResult;
@@ -34,13 +36,29 @@ export const LoginPage = () => {
       .catch(() => {});
   }, [navigate]);
 
-  const handleSubmit = (values: any) => {
+  const handleSubmit = async (values: any) => {
     setErrorMessage("");
-    login(values, {
-      onError: (err: any) => {
-        setErrorMessage(err?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.");
-      },
-    });
+    setVerifyingCaptcha(true);
+    let captchaToken = "";
+    try {
+      captchaToken = await executeSliderCaptcha("login");
+    } catch (cErr: any) {
+      setErrorMessage("Bạn chưa hoàn thành xác thực Slider Captcha. Vui lòng thử lại.");
+      setVerifyingCaptcha(false);
+      return;
+    }
+
+    login(
+      { ...values, captcha_token: captchaToken },
+      {
+        onError: (err: any) => {
+          setErrorMessage(err?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.");
+        },
+        onSettled: () => {
+          setVerifyingCaptcha(false);
+        },
+      }
+    );
   };
 
   const { token } = theme.useToken();
@@ -153,7 +171,7 @@ export const LoginPage = () => {
           <Button
             type="primary"
             htmlType="submit"
-            loading={isLoading}
+            loading={isLoading || verifyingCaptcha}
             block
             style={{
               height: "48px",
@@ -163,7 +181,7 @@ export const LoginPage = () => {
               boxShadow: "none",
             }}
           >
-            Sign In
+            {verifyingCaptcha ? "Đang xác thực Captcha..." : "Sign In"}
           </Button>
         </Form.Item>
 

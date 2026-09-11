@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../auth/AuthLayout";
 import axios from "axios";
 import { API_BASE_URL } from "../../config";
+import { executeSliderCaptcha } from "../../utils/captcha";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -12,16 +13,29 @@ export const RegisterPage = () => {
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [verifyingCaptcha, setVerifyingCaptcha] = useState(false);
   const [successEmail, setSuccessEmail] = useState<string | null>(null);
   const { token } = theme.useToken();
 
   const handleSubmit = async (values: any) => {
+    setVerifyingCaptcha(true);
+    let captchaToken = "";
+    try {
+      captchaToken = await executeSliderCaptcha("register");
+    } catch (cErr: any) {
+      message.warning("Bạn chưa hoàn tất xác thực Slider Captcha. Vui lòng thử lại.");
+      setVerifyingCaptcha(false);
+      return;
+    }
+    setVerifyingCaptcha(false);
+
     setSubmitting(true);
     try {
       await axios.post(`${API_BASE_URL}/auth/register`, {
         email: values.email?.trim().toLowerCase(),
         password: values.password,
         name: `${values.firstName?.trim()} ${values.lastName?.trim()}`,
+        captcha_token: captchaToken,
       });
       
       setSuccessEmail(values.email?.trim().toLowerCase());
@@ -223,7 +237,7 @@ export const RegisterPage = () => {
           <Button
             type="primary"
             htmlType="submit"
-            loading={submitting}
+            loading={submitting || verifyingCaptcha}
             block
             style={{
               height: "48px",
@@ -235,7 +249,7 @@ export const RegisterPage = () => {
               boxShadow: "none",
             }}
           >
-            {submitting ? "Đang xử lý đăng ký..." : "Đăng Ký Tài Khoản"}
+            {verifyingCaptcha ? "Đang xác thực Captcha..." : (submitting ? "Đang xử lý đăng ký..." : "Đăng Ký Tài Khoản")}
           </Button>
         </Form.Item>
 

@@ -7,5 +7,7 @@ import { ReputationModule } from '../reputation/reputation.module.js';
   imports: [ReputationModule],
   controllers: [VerifyController],
   providers: [VerifyService],
+  exports: [VerifyService],
 })
 export class VerifyModule {}
+

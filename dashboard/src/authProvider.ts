@@ -4,14 +4,14 @@ import { API_BASE_URL } from "./config";
 const API_URL = API_BASE_URL;
 
 export const authProvider: AuthProvider = {
-  login: async ({ email, password }) => {
+  login: async ({ email, password, captcha_token }: any) => {
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, captcha_token }),
       });
 
       if (!response.ok) {
