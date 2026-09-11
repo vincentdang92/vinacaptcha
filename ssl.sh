@@ -151,8 +151,10 @@ server {
         alias /usr/share/nginx/widget/;
         add_header Access-Control-Allow-Origin * always;
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
-        # ETag revalidation: tải bản mới tức thì khi update widget, trả 304 khi không đổi
-        add_header Cache-Control "no-cache, must-revalidate" always;
+        # Đảm bảo file JS luôn tươi mới 100% tức thì khi deploy bản mới mà không cần user đổi URL
+        add_header Cache-Control "no-cache, no-store, must-revalidate, max-age=0" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
         etag on;
         try_files \$uri \$uri/ /vina-captcha.js =404;
     }
