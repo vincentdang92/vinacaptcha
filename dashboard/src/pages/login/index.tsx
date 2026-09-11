@@ -18,6 +18,8 @@ export const LoginPage = () => {
   const { mutate: login } = loginResult;
   const isLoading = loginResult?.isPending || loginResult?.isLoading;
   const isActivated = searchParams.get("activated") === "true";
+  const isRegistered = searchParams.get("registered") === "true";
+  const registeredEmail = searchParams.get("email") || "";
 
   // Kiểm tra nếu hệ thống chưa setup -> chuyển hướng sang /setup
   useEffect(() => {
@@ -50,9 +52,9 @@ export const LoginPage = () => {
 
   return (
     <AuthLayout>
-      <Title level={2} style={{ fontWeight: 700, marginBottom: "8px" }}>Sign In</Title>
+      <Title level={2} style={{ fontWeight: 700, marginBottom: "8px" }}>Đăng Nhập</Title>
       <Text type="secondary" style={{ fontSize: "16px", display: "block", marginBottom: "32px" }}>
-        Enter your email and password to sign in!
+        Nhập email và mật khẩu để đăng nhập vào trang quản trị
       </Text>
 
       <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
@@ -70,12 +72,27 @@ export const LoginPage = () => {
         </Button>
       </div>
 
-      <Divider style={{ fontSize: "14px", margin: "24px 0" }} plain>Or</Divider>
+      <Divider style={{ fontSize: "14px", margin: "24px 0" }} plain>Hoặc đăng nhập bằng Email</Divider>
 
       {isActivated && (
         <Alert
-          message="Tài khoản kích hoạt thành công! Bạn có thể đăng nhập ngay bây giờ."
+          message="Kích hoạt tài khoản thành công!"
+          description="Tài khoản của bạn đã được kích hoạt. Hãy nhập thông tin bên dưới để đăng nhập."
           type="success"
+          showIcon
+          style={{ marginBottom: 20, borderRadius: 6 }}
+        />
+      )}
+
+      {isRegistered && !isActivated && (
+        <Alert
+          message="Đăng ký tài khoản thành công!"
+          description={
+            <span>
+              Chúng tôi đã gửi email kích hoạt tới <strong>{registeredEmail || "hộp thư của bạn"}</strong>. Vui lòng kiểm tra hộp thư (bao gồm cả thư mục Spam) và bấm vào liên kết kích hoạt trước khi đăng nhập.
+            </span>
+          }
+          type="info"
           showIcon
           style={{ marginBottom: 20, borderRadius: 6 }}
         />
@@ -94,6 +111,7 @@ export const LoginPage = () => {
         form={form}
         layout="vertical"
         onFinish={handleSubmit}
+        initialValues={{ email: registeredEmail }}
         requiredMark={false}
       >
         <Form.Item

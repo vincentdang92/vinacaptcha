@@ -1,41 +1,133 @@
+import { useState } from "react";
 import { Form, Input, Button, Typography, Divider, Row, Col, message, theme } from "antd";
-import { MailOutlined, LockOutlined, GoogleOutlined, TwitterOutlined, UserOutlined } from "@ant-design/icons";
+import { MailOutlined, LockOutlined, GoogleOutlined, TwitterOutlined, UserOutlined, CheckCircleOutlined, ArrowRightOutlined } from "@ant-design/icons";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthLayout } from "../auth/AuthLayout";
 import axios from "axios";
 import { API_BASE_URL } from "../../config";
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 export const RegisterPage = () => {
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [successEmail, setSuccessEmail] = useState<string | null>(null);
+  const { token } = theme.useToken();
+
   const handleSubmit = async (values: any) => {
+    setSubmitting(true);
     try {
       await axios.post(`${API_BASE_URL}/auth/register`, {
-        email: values.email,
+        email: values.email?.trim().toLowerCase(),
         password: values.password,
-        name: `${values.firstName} ${values.lastName}`,
+        name: `${values.firstName?.trim()} ${values.lastName?.trim()}`,
       });
+      
+      setSuccessEmail(values.email?.trim().toLowerCase());
       message.success("Đăng ký thành công! Vui lòng kiểm tra email để kích hoạt tài khoản.");
-      navigate("/login");
     } catch (err: any) {
-      message.error(err.response?.data?.message || "Đăng ký thất bại");
+      message.error(err.response?.data?.message || "Đăng ký thất bại. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const { token } = theme.useToken();
   const inputStyle = {
     padding: "10px 16px",
     borderRadius: "8px",
     borderColor: token.colorBorder,
   };
 
+  // Nếu đăng ký thành công -> Hiển thị Màn hình thông báo kích hoạt tài khoản
+  if (successEmail) {
+    return (
+      <AuthLayout>
+        <div style={{ textAlign: "center", padding: "12px 0" }}>
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              background: token.colorSuccessBg || "rgba(40, 199, 111, 0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
+            <CheckCircleOutlined style={{ fontSize: 38, color: token.colorSuccess }} />
+          </div>
+
+          <Title level={2} style={{ fontWeight: 700, marginBottom: "8px" }}>
+            Đăng Ký Thành Công!
+          </Title>
+          <Paragraph style={{ fontSize: "15px", color: token.colorTextSecondary, marginBottom: "24px", lineHeight: "1.6" }}>
+            Hệ thống đã gửi email chứa liên kết kích hoạt tài khoản tới:
+            <br />
+            <Text strong style={{ color: token.colorPrimary, fontSize: "16px" }}>
+              {successEmail}
+            </Text>
+          </Paragraph>
+
+          <div
+            style={{
+              background: token.colorBgLayout,
+              border: `1px solid ${token.colorBorderSecondary}`,
+              borderRadius: "10px",
+              padding: "16px 20px",
+              textAlign: "left",
+              marginBottom: "28px",
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 18 }}>🛡️</span>
+              <div>
+                <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>
+                  Hướng dẫn kích hoạt tài khoản:
+                </Text>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: token.colorTextSecondary, lineHeight: 1.8 }}>
+                  <li>Mở hộp thư đến của bạn và tìm email từ <strong>NhanHoaCaptcha System</strong>.</li>
+                  <li>Bấm vào nút <strong>"Kích Hoạt Tài Khoản Ngay"</strong> trong email.</li>
+                  <li>Nếu không tìm thấy, vui lòng kiểm tra thêm trong thư mục <strong>Spam / Thư rác</strong>.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <Button
+            type="primary"
+            size="large"
+            block
+            icon={<ArrowRightOutlined />}
+            onClick={() => navigate(`/login?registered=true&email=${encodeURIComponent(successEmail)}`)}
+            style={{
+              height: "48px",
+              fontWeight: 600,
+              fontSize: "16px",
+              borderRadius: "8px",
+              background: token.colorPrimary,
+              borderColor: token.colorPrimary,
+            }}
+          >
+            Đến Trang Đăng Nhập
+          </Button>
+
+          <div style={{ textAlign: "center", marginTop: "20px" }}>
+            <Button type="link" onClick={() => setSuccessEmail(null)} style={{ color: token.colorTextSecondary, fontSize: 13 }}>
+              ← Đăng ký tài khoản khác
+            </Button>
+          </div>
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout>
-      <Title level={2} style={{ fontWeight: 700, marginBottom: "8px" }}>Sign Up</Title>
+      <Title level={2} style={{ fontWeight: 700, marginBottom: "8px" }}>Tạo Tài Khoản</Title>
       <Text type="secondary" style={{ fontSize: "16px", display: "block", marginBottom: "32px" }}>
-        Enter your email and password to sign up!
+        Đăng ký tài khoản để bắt đầu tích hợp VinaCaptcha bảo vệ website
       </Text>
 
       <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
@@ -53,7 +145,7 @@ export const RegisterPage = () => {
         </Button>
       </div>
 
-      <Divider style={{ fontSize: "14px", margin: "24px 0" }} plain>Or</Divider>
+      <Divider style={{ fontSize: "14px", margin: "24px 0" }} plain>Hoặc đăng ký bằng Email</Divider>
 
       <Form
         form={form}
@@ -64,26 +156,26 @@ export const RegisterPage = () => {
         <Row gutter={16}>
           <Col span={12}>
             <Form.Item
-              label={<Text style={{ fontWeight: 500 }}>First Name<span style={{ color: token.colorError }}>*</span></Text>}
+              label={<Text style={{ fontWeight: 500 }}>Họ & Tên đệm<span style={{ color: token.colorError }}>*</span></Text>}
               name="firstName"
-              rules={[{ required: true, message: "Required" }]}
+              rules={[{ required: true, message: "Vui lòng nhập họ" }]}
             >
               <Input 
                 prefix={<UserOutlined style={{ color: token.colorTextPlaceholder, marginRight: 8 }} />} 
-                placeholder="Enter your first name" 
+                placeholder="VD: Nguyễn Văn" 
                 style={inputStyle}
               />
             </Form.Item>
           </Col>
           <Col span={12}>
             <Form.Item
-              label={<Text style={{ fontWeight: 500 }}>Last Name<span style={{ color: token.colorError }}>*</span></Text>}
+              label={<Text style={{ fontWeight: 500 }}>Tên<span style={{ color: token.colorError }}>*</span></Text>}
               name="lastName"
-              rules={[{ required: true, message: "Required" }]}
+              rules={[{ required: true, message: "Vui lòng nhập tên" }]}
             >
               <Input 
                 prefix={<UserOutlined style={{ color: token.colorTextPlaceholder, marginRight: 8 }} />} 
-                placeholder="Enter your last name" 
+                placeholder="VD: An" 
                 style={inputStyle}
               />
             </Form.Item>
@@ -91,7 +183,7 @@ export const RegisterPage = () => {
         </Row>
 
         <Form.Item
-          label={<Text style={{ fontWeight: 500 }}>Email<span style={{ color: token.colorError }}>*</span></Text>}
+          label={<Text style={{ fontWeight: 500 }}>Email Đăng Ký<span style={{ color: token.colorError }}>*</span></Text>}
           name="email"
           rules={[
             { required: true, message: "Vui lòng nhập email" },
@@ -100,27 +192,30 @@ export const RegisterPage = () => {
         >
           <Input 
             prefix={<MailOutlined style={{ color: token.colorTextPlaceholder, marginRight: 8 }} />} 
-            placeholder="Enter your email" 
+            placeholder="VD: user@yourdomain.com" 
             style={inputStyle}
           />
         </Form.Item>
 
         <Form.Item
-          label={<Text style={{ fontWeight: 500 }}>Password<span style={{ color: token.colorError }}>*</span></Text>}
+          label={<Text style={{ fontWeight: 500 }}>Mật Khẩu<span style={{ color: token.colorError }}>*</span></Text>}
           name="password"
-          rules={[{ required: true, message: "Vui lòng nhập mật khẩu" }]}
+          rules={[
+            { required: true, message: "Vui lòng nhập mật khẩu" },
+            { min: 6, message: "Mật khẩu phải có ít nhất 6 ký tự" },
+          ]}
         >
           <Input.Password 
             prefix={<LockOutlined style={{ color: token.colorTextPlaceholder, marginRight: 8 }} />} 
-            placeholder="Enter your password" 
+            placeholder="Nhập ít nhất 6 ký tự" 
             style={inputStyle}
           />
         </Form.Item>
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "24px" }}>
-          <input type="checkbox" style={{ width: 16, height: 16, accentColor: token.colorPrimary, marginTop: "4px" }} />
-          <Text type="secondary" style={{ lineHeight: "1.5" }}>
-            By creating an account means you agree to the <strong style={{ color: token.colorText }}>Terms and Conditions</strong>, and our <strong style={{ color: token.colorText }}>Privacy Policy</strong>
+          <input type="checkbox" defaultChecked style={{ width: 16, height: 16, accentColor: token.colorPrimary, marginTop: "4px" }} />
+          <Text type="secondary" style={{ lineHeight: "1.5", fontSize: 13 }}>
+            Bằng việc đăng ký, bạn đồng ý với <strong style={{ color: token.colorText }}>Điều khoản dịch vụ</strong> và <strong style={{ color: token.colorText }}>Chính sách bảo mật</strong> của hệ thống.
           </Text>
         </div>
 
@@ -128,22 +223,25 @@ export const RegisterPage = () => {
           <Button
             type="primary"
             htmlType="submit"
+            loading={submitting}
             block
             style={{
               height: "48px",
               fontWeight: 600,
               fontSize: "16px",
               borderRadius: "8px",
+              background: token.colorPrimary,
+              borderColor: token.colorPrimary,
               boxShadow: "none",
             }}
           >
-            Sign Up
+            {submitting ? "Đang xử lý đăng ký..." : "Đăng Ký Tài Khoản"}
           </Button>
         </Form.Item>
 
         <div style={{ textAlign: "center", marginTop: "24px" }}>
-          <Text type="secondary">Already have an account? </Text>
-          <Link to="/login" style={{ color: token.colorPrimary, fontWeight: 500 }}>Sign In</Link>
+          <Text type="secondary">Đã có tài khoản? </Text>
+          <Link to="/login" style={{ color: token.colorPrimary, fontWeight: 600 }}>Đăng Nhập Ngay</Link>
         </div>
       </Form>
     </AuthLayout>

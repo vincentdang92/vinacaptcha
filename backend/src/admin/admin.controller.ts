@@ -33,21 +33,31 @@ export class AdminController {
   }
 
   @Post('auth/register')
-  async register(@Body() body: any) {
+  async register(@Body() body: any, @Req() req: any) {
     if (!body?.email || !body?.password || !body?.name) {
       throw new BadRequestException('Email, mật khẩu và tên là bắt buộc');
     }
-    return this.adminService.register(body.email, body.password, body.name);
+    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers['host'];
+    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+
+    return this.adminService.register(body.email, body.password, body.name, requestBaseUrl);
   }
 
   @Get('auth/activate')
-  async activate(@Query('token') token: string, @Res() res: any) {
+  async activate(@Query('token') token: string, @Req() req: any, @Res() res: any) {
     if (!token) {
       throw new BadRequestException('Thiếu token kích hoạt');
     }
     await this.adminService.activateAccount(token);
-    const dashboardUrl = process.env.DASHBOARD_URL || process.env.APP_URL || '';
-    const redirectUrl = dashboardUrl ? `${dashboardUrl}/login?activated=true` : '/login?activated=true';
+
+    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers['host'];
+    const dashboardUrl = (process.env.APP_URL && !process.env.APP_URL.includes('localhost'))
+      ? process.env.APP_URL
+      : (process.env.DASHBOARD_URL || (host ? `${proto}://${host}` : ''));
+
+    const redirectUrl = dashboardUrl ? `${dashboardUrl.replace(/\/+$/, '')}/login?activated=true` : '/login?activated=true';
     return res.redirect(redirectUrl);
   }
 

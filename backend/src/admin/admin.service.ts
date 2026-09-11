@@ -407,7 +407,7 @@ export class AdminService {
     };
   }
 
-  async register(email: string, password: string, name: string) {
+  async register(email: string, password: string, name: string, requestBaseUrl?: string) {
     const cleanEmail = email?.trim().toLowerCase();
     const existing = await this.accountsRepo.findOneBy({ email: cleanEmail });
     if (existing) {
@@ -442,8 +442,8 @@ export class AdminService {
     
     await this.accountsRepo.save(acc);
 
-    // Gửi email kích hoạt tài khoản qua MailService
-    await this.mailService.sendActivationEmail(cleanEmail, name, activationToken);
+    // Gửi email kích hoạt tài khoản qua MailService với baseUrl động
+    await this.mailService.sendActivationEmail(cleanEmail, name, activationToken, requestBaseUrl);
 
     return { success: true, message: 'Đăng ký thành công, vui lòng kiểm tra email để kích hoạt.' };
   }

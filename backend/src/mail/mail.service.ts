@@ -346,7 +346,12 @@ export class MailService implements OnModuleInit {
   /**
    * Gửi email kích hoạt tài khoản người dùng
    */
-  async sendActivationEmail(email: string, name: string, token: string): Promise<SendMailResult> {
+  async sendActivationEmail(
+    email: string, 
+    name: string, 
+    token: string, 
+    requestBaseUrl?: string,
+  ): Promise<SendMailResult> {
     const config = this.getEffectiveConfig();
     const isConfigured = Boolean(config.host && (config.user ? config.pass : true));
 
@@ -357,7 +362,20 @@ export class MailService implements OnModuleInit {
 
     try {
       const transporter = this.createTransporter();
-      const appUrl = process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
+      
+      // Tự động nhận diện host/domain từ request incoming hoặc biến môi trường APP_URL
+      let appUrl = requestBaseUrl;
+      if (!appUrl || appUrl.includes('localhost')) {
+        if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+          appUrl = process.env.APP_URL;
+        } else if (process.env.DASHBOARD_URL && !process.env.DASHBOARD_URL.includes('localhost')) {
+          appUrl = process.env.DASHBOARD_URL;
+        } else {
+          appUrl = requestBaseUrl || process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
+        }
+      }
+
+      appUrl = appUrl.replace(/\/+$/, '');
       const activationLink = `${appUrl}/admin/v1/auth/activate?token=${token}`;
 
       const fromName = config.from_name;
