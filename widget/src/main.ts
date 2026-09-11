@@ -46,6 +46,40 @@ function getDefaultBaseUrl(): string {
   return typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:3068';
 }
 
+// ─── Global Telemetry Tracker (reCAPTCHA v3 Drop-in Interaction Engine) ────────
+let globalMouseMoves = 0;
+let globalMouseClicks = 0;
+let globalKeyStrokes = 0;
+let globalTicking = false;
+const globalScriptStartTime = Date.now();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('mousemove', () => {
+    if (!globalTicking) {
+      window.requestAnimationFrame(() => {
+        globalMouseMoves++;
+        globalTicking = false;
+      });
+      globalTicking = true;
+    }
+  }, { passive: true });
+
+  window.addEventListener('click', () => {
+    globalMouseClicks++;
+  }, { passive: true });
+
+  window.addEventListener('keydown', () => {
+    globalKeyStrokes++;
+  }, { passive: true });
+}
+
+function getGlobalTimeOnPageMs(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return Math.round(performance.now());
+  }
+  return Date.now() - globalScriptStartTime;
+}
+
 class NhanHoaCaptcha {
   private container: HTMLElement;
   private config: NhanHoaCaptchaConfig;
@@ -660,10 +694,10 @@ class NhanHoaCaptcha {
     const clientSignals = {
       webdriver: navigator.webdriver || false,
       canvas_fingerprint: this.getCanvasFingerprint(),
-      time_on_page_ms: Date.now() - this.loadTime,
-      mouse_moves: this.mouseMoves,
-      mouse_clicks: this.mouseClicks,
-      key_strokes: this.keyStrokes,
+      time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
+      mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
+      mouse_clicks: Math.max(this.mouseClicks, globalMouseClicks),
+      key_strokes: Math.max(this.keyStrokes, globalKeyStrokes),
     };
 
     if (this.config.debug) {
@@ -791,10 +825,10 @@ class NhanHoaCaptcha {
     const clientSignals = {
       webdriver: navigator.webdriver || false,
       canvas_fingerprint: this.getCanvasFingerprint(),
-      time_on_page_ms: Date.now() - this.loadTime,
-      mouse_moves: this.mouseMoves,
-      mouse_clicks: this.mouseClicks,
-      key_strokes: this.keyStrokes,
+      time_on_page_ms: Math.max(Date.now() - this.loadTime, getGlobalTimeOnPageMs()),
+      mouse_moves: Math.max(this.mouseMoves, globalMouseMoves),
+      mouse_clicks: Math.max(this.mouseClicks, globalMouseClicks),
+      key_strokes: Math.max(this.keyStrokes, globalKeyStrokes),
       ...(options?.customSignals || {}),
     };
 
