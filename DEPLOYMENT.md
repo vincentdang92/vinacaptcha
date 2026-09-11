@@ -83,21 +83,24 @@ Khi VPS A ngừng phản hồi:
 
 ---
 
-## 4. Cấu Hình SSL / HTTPS Miễn Phí với Let's Encrypt
+## 4. Cấu Hình SSL / HTTPS Tự Động 1-Click (`./ssl.sh`)
 
-Khi đã trỏ Domain (ví dụ: `captcha.nhanhoa.com`) về IP VPS, bạn có thể cấp chứng chỉ SSL tự động bằng Certbot:
+Khi đã trỏ Domain (ví dụ: `captcha.nhanhoa.com`) về IP VPS, bạn chỉ cần chạy script `ssl.sh`:
 
 ```bash
-# Cài đặt certbot
-sudo apt update && sudo apt install -y certbot
+# Cú pháp tự động:
+./ssl.sh <ten_mien_cua_ban> [email_quan_tri]
 
-# Cấp chứng chỉ SSL (tạm tắt gateway port 80 trong 5 giây)
-docker compose stop gateway
-sudo certbot certonly --standalone -d captcha.nhanhoa.com
-docker compose start gateway
+# Ví dụ thực tế:
+./ssl.sh captcha.nhanhoa.com admin@nhanhoa.com
 ```
 
-Mount thư mục chứng chỉ `/etc/letsencrypt` vào file `docker-compose.yml` để Nginx Gateway tự động kích hoạt HTTPS (Port 443).
+> **Script `ssl.sh` sẽ tự động:**
+> 1. Cài đặt Certbot (nếu máy chủ chưa có).
+> 2. Tạm dừng Gateway trong 3 giây để xác thực Let's Encrypt qua Port 80.
+> 3. Tự động cấu hình Nginx sang giao thức **HTTPS (Port 443)** với TLS 1.2/1.3, ciphers bảo mật cao và chuyển hướng 301 từ HTTP sang HTTPS.
+> 4. Thiết lập lịch tự động gia hạn chứng chỉ SSL hàng ngày (Cronjob) để bạn không bao giờ bị hết hạn chứng chỉ.
+
 
 ---
 

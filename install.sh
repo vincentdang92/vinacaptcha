@@ -83,8 +83,15 @@ fi
 
 # 6. THỰC THI TRIỂN KHAI VÀ KHỞI ĐỘNG DỊCH VỤ
 echo -e "🚀 [5/5] Tiến hành build và khởi chạy các dịch vụ Docker..."
-chmod +x deploy.sh
+chmod +x deploy.sh ssl.sh 2>/dev/null || true
 ./deploy.sh
+
+# XỬ LÝ NẾU CÓ THAM SỐ CÀI SSL TRỰC TIẾP (--ssl domain [email])
+if [ "$1" == "--ssl" ] && [ -n "$2" ]; then
+    echo -e "\n🔒 Nhận diện tham số --ssl, tự động cấu hình chứng chỉ SSL cho $2..."
+    ./ssl.sh "$2" "$3"
+    exit 0
+fi
 
 # 7. LẤY IP PUBLIC CỦA VPS ĐỂ HIỂN THỊ
 SERVER_IP=$(curl -4s --connect-timeout 3 https://ifconfig.me 2>/dev/null || curl -4s --connect-timeout 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
@@ -98,6 +105,8 @@ echo -e "🌐 Web Dashboard   : ${BLUE}http://$SERVER_IP${NC}"
 echo -e "📦 Widget Script   : ${BLUE}http://$SERVER_IP/widget/vina-captcha.js${NC}"
 echo -e "📡 Public API      : ${BLUE}http://$SERVER_IP/v1/issue${NC}"
 echo -e "----------------------------------------------------------------"
-echo -e "👉 ${YELLOW}BƯỚC TIẾP THEO:${NC} Mở trình duyệt truy cập ${BLUE}http://$SERVER_IP${NC} để hoàn tất"
+echo -e "👉 ${YELLOW}BƯỚC 1:${NC} Mở trình duyệt truy cập ${BLUE}http://$SERVER_IP${NC} để hoàn tất"
 echo -e "   thiết lập ban đầu qua màn hình ${GREEN}Setup Wizard${NC} (Tạo Super Admin & Site)."
+echo -e "👉 ${YELLOW}BƯỚC 2 (Sau khi trỏ tên miền):${NC} Chạy lệnh kích hoạt HTTPS xanh:"
+echo -e "   ${CYAN}cd $INSTALL_PATH && ./ssl.sh <ten_mien_cua_ban>${NC}"
 echo -e "================================================================\n"
