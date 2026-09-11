@@ -125,43 +125,115 @@ class NhanHoaCaptcha {
   // ─── Badge UI ────────────────────────────────────────────────────────────────
 
   private createBadge() {
+    if (document.getElementById('vina-captcha-badge')) return;
+
+    // Inject CSS styling once for badge animation & responsive slider out
+    if (!document.getElementById('vina-captcha-badge-style')) {
+      const style = document.createElement('style');
+      style.id = 'vina-captcha-badge-style';
+      style.textContent = `
+        #vina-captcha-badge {
+          position: fixed;
+          bottom: 14px;
+          right: 14px;
+          z-index: 99999;
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          height: 36px;
+          min-width: 36px;
+          padding: 0 9px;
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          border-radius: 18px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 11.5px;
+          font-weight: 500;
+          color: #374151;
+          cursor: pointer;
+          user-select: none;
+          text-decoration: none;
+          box-sizing: border-box;
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+          overflow: hidden;
+        }
+
+        #vina-captcha-badge:hover,
+        #vina-captcha-badge.vina-badge-expanded {
+          padding-left: 12px;
+          padding-right: 10px;
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+          border-color: rgba(37, 99, 235, 0.35);
+          background: #ffffff;
+        }
+
+        #vina-captcha-badge .vina-badge-text {
+          max-width: 0;
+          opacity: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          margin-right: 0;
+          color: #374151;
+          font-size: 11.5px;
+          line-height: 1;
+          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-right 0.35s ease;
+          pointer-events: none;
+        }
+
+        #vina-captcha-badge:hover .vina-badge-text,
+        #vina-captcha-badge.vina-badge-expanded .vina-badge-text {
+          max-width: 220px;
+          opacity: 1;
+          margin-right: 8px;
+          pointer-events: auto;
+        }
+
+        #vina-captcha-badge .vina-badge-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          color: #2563eb;
+          flex-shrink: 0;
+          transition: transform 0.3s ease, color 0.3s ease;
+        }
+
+        #vina-captcha-badge:hover .vina-badge-icon {
+          transform: scale(1.08);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     const badge = document.createElement('div');
     badge.id = 'vina-captcha-badge';
-    badge.style.cssText = `
-      position: fixed;
-      bottom: 14px;
-      right: 14px;
-      z-index: 99999;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      background: rgba(255,255,255,0.95);
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 11px;
-      color: #555;
-      cursor: pointer;
-      user-select: none;
-      transition: opacity 0.4s ease, transform 0.2s ease;
-      text-decoration: none;
-    `;
+    badge.setAttribute('title', 'Protected by NhanHoaCaptcha');
 
-    const icon = document.createElement('span');
-    icon.textContent = '🛡';
-    icon.style.fontSize = '13px';
-
+    // 1. Text description on the left (slides out smoothly when hovered)
     const text = document.createElement('span');
+    text.className = 'vina-badge-text';
     text.textContent = 'Protected by NhanHoaCaptcha';
     this.badgeText = text;
 
-    badge.appendChild(icon);
+    // 2. Shield icon on the right
+    const icon = document.createElement('span');
+    icon.className = 'vina-badge-icon';
+    icon.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    `;
+
     badge.appendChild(text);
+    badge.appendChild(icon);
 
     badge.addEventListener('click', () => {
-      window.open('https://captcha.nhanhoa.com', '_blank', 'noopener');
+      window.open('https://nhanhoa.com', '_blank', 'noopener');
     });
 
     document.body.appendChild(badge);
@@ -171,24 +243,36 @@ class NhanHoaCaptcha {
   private setBadgeState(state: BadgeState, customText?: string) {
     if (!this.badge || !this.badgeText) return;
 
-    const styles: Record<BadgeState, { color: string; opacity: string; text: string }> = {
-      idle:    { color: '#555',    opacity: '1',   text: 'Protected by NhanHoaCaptcha' },
-      loading: { color: '#7367f0', opacity: '1',   text: 'Đang xác thực...' },
-      success: { color: '#28c76f', opacity: '1',   text: '✓ Đã xác thực' },
-      error:   { color: '#ea5455', opacity: '1',   text: '⚠ Không thể kết nối' },
+    const styles: Record<BadgeState, { color: string; text: string }> = {
+      idle:    { color: '#2563eb', text: 'Protected by NhanHoaCaptcha' },
+      loading: { color: '#7367f0', text: 'Đang xác thực...' },
+      success: { color: '#16a34a', text: '✓ Đã xác thực' },
+      error:   { color: '#dc2626', text: '⚠ Không thể kết nối' },
     };
 
     const s = styles[state];
-    this.badge.style.color = s.color;
-    this.badge.style.borderColor = s.color + '44';
-    this.badge.style.opacity = s.opacity;
     this.badgeText.textContent = customText || s.text;
 
-    if (state === 'success') {
+    const iconEl = this.badge.querySelector<HTMLElement>('.vina-badge-icon');
+    if (iconEl) iconEl.style.color = s.color;
+    this.badge.style.borderColor = state === 'idle' ? 'rgba(0,0,0,0.12)' : s.color + '66';
+
+    // Tự động mở rộng badge khi trạng thái thay đổi để user nhận biết
+    if (state !== 'idle') {
+      this.badge.classList.add('vina-badge-expanded');
+    }
+
+    if (state === 'success' || state === 'error') {
       setTimeout(() => {
-        if (this.badge) this.badge.style.opacity = '0.4';
-        setTimeout(() => this.setBadgeState('idle'), 2000);
-      }, 2000);
+        if (this.badge) {
+          this.badge.classList.remove('vina-badge-expanded');
+          if (state === 'success') {
+            this.setBadgeState('idle');
+          }
+        }
+      }, 2200);
+    } else if (state === 'idle') {
+      this.badge.classList.remove('vina-badge-expanded');
     }
   }
 
