@@ -151,7 +151,9 @@ server {
         alias /usr/share/nginx/widget/;
         add_header Access-Control-Allow-Origin * always;
         add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
-        add_header Cache-Control "public, max-age=3600, s-maxage=86400" always;
+        # ETag revalidation: tải bản mới tức thì khi update widget, trả 304 khi không đổi
+        add_header Cache-Control "no-cache, must-revalidate" always;
+        etag on;
         try_files \$uri \$uri/ /vina-captcha.js =404;
     }
 
