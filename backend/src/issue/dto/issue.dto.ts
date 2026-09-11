@@ -20,6 +20,10 @@ export class ClientSignalsDto {
 
   @IsNumber()
   key_strokes: number;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
 }
 
 export class IssueTokenDto {
@@ -33,6 +37,10 @@ export class IssueTokenDto {
   @ValidateNested()
   @Type(() => ClientSignalsDto)
   client_signals: ClientSignalsDto;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
 
   /**
    * IP public do Widget tự báo cáo (lấy qua api.ipify.org trên browser).

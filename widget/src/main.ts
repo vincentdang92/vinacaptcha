@@ -117,7 +117,7 @@ class NhanHoaCaptcha {
         this.form.appendChild(tokenInput);
       }
       this.form.addEventListener('submit', (e) => this.handleSubmit(e, honeypot, tokenInput as HTMLInputElement));
-    } else {
+    } else if (this.config.debug && !this.config.hideBadge) {
       console.warn('[NhanHoaCaptcha] Không tìm thấy form cha. Chạy ở chế độ manual.');
     }
   }
