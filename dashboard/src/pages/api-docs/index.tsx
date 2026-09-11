@@ -37,10 +37,9 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 ## 2. Nguyên Lý Tích Hợp (2 Bước Bắt Buộc)
 
-1. **Frontend (Client)**:
-   - Nhúng Widget JS \`vina-captcha.js\` vào form.
-   - Khởi tạo Widget bằng **Public Site Key (UUID)**: \`new NhanHoaCaptcha("container-id", "YOUR_SITE_KEY_UUID")\`.
-   - Khi user submit form, Widget tự động tạo \`verify_token\` ngắn hạn (60s) gắn vào field ẩn \`vina_captcha_token\` trong form.
+1. **Frontend (Client) — Có 2 cách tích hợp tùy chọn**:
+   - **Cách A (Tự Động — Khuyến nghị)**: Thêm \`<div id="vina-captcha-container"></div>\` vào form và gọi \`new NhanHoaCaptcha("vina-captcha-container", "YOUR_SITE_KEY_UUID")\`. Widget sẽ tự động bắt sự kiện submit, chấm điểm bot, hiển thị thử thách nếu cần và gán token vào input \`#vina_captcha_token\`.
+   - **Cách B (Chủ Động Khi Submit — reCAPTCHA v3 Style)**: Bắt sự kiện \`form.addEventListener('submit')\`, \`e.preventDefault()\`, và gọi \`NhanHoaCaptcha.ready()\` + \`NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(token => ...)\` để nhận token, gán vào form và submit chủ động kèm loading modal.
 2. **Backend (Server) & Chiến Lược Fail-Open Fallback (Timeout > 5s)**:
    - Server nhận \`vina_captcha_token\` từ request submit của client.
    - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\` với **Timeout tối đa 5 giây (5000ms)**.
@@ -388,8 +387,20 @@ export const ApiDocsPage = () => {
 </form>`} />
 
           {/* Bước 3 */}
-          <Title level={5} style={{ color: "#7367f0" }}>Bước 3 — Khởi tạo Widget (Dùng Public Site Key)</Title>
-          <CodeBlock lang="js" code={`<script>
+          <Title level={5} style={{ color: "#7367f0" }}>Bước 3 — Khởi tạo Widget hoặc Gọi Chủ Động khi Submit</Title>
+          <Tabs
+            defaultActiveKey="auto"
+            size="small"
+            items={[
+              {
+                key: "auto",
+                label: "Cách 1: Nhúng Tự Động (Auto Container)",
+                children: (
+                  <div>
+                    <Paragraph type="secondary">
+                      Widget tự động bắt sự kiện submit form, kiểm tra bot ngầm, hiện thử thách nếu cần và gán token vào form.
+                    </Paragraph>
+                    <CodeBlock lang="js" code={`<script>
   document.addEventListener('DOMContentLoaded', () => {
     // Khởi tạo Widget bằng Public Site Key (UUID) lấy từ mục Quản lý Sites
     const captcha = new NhanHoaCaptcha('vina-captcha-container', {
@@ -406,6 +417,60 @@ export const ApiDocsPage = () => {
     });
   });
 </script>`} />
+                  </div>
+                ),
+              },
+              {
+                key: "programmatic",
+                label: "Cách 2: Chặn & Gọi Chủ Động Khi Submit (reCAPTCHA v3 Style)",
+                children: (
+                  <div>
+                    <Paragraph type="secondary">
+                      Phù hợp cho các form sử dụng AJAX, jQuery Modal Loading, hoặc muốn chủ động kiểm soát thời điểm lấy token captcha trước khi gọi <Text code>form.submit()</Text>.
+                    </Paragraph>
+                    <CodeBlock lang="js" code={`<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Bắt sự kiện submit của Form (Login/Register/Checkout)
+    document.querySelector("form#login").addEventListener("submit", function(e) {
+      e.preventDefault(); 
+      const form = document.getElementById('login');
+      
+      // Khởi chạy lấy token xác thực từ NhanHoaCaptcha
+      NhanHoaCaptcha.ready(function () {
+        NhanHoaCaptcha.execute('YOUR_PUBLIC_SITE_KEY_UUID', { action: 'login' }).then(function (token) {
+          if (!token) {
+            alert("Xác thực Captcha thất bại. Vui lòng thử lại.");
+            return;
+          }
+
+          // 1. Gán token nhận được vào field ẩn trong form (hoặc gán bằng jQuery)
+          document.getElementById('vina_captcha_token').value = token;
+          // $('#vina_captcha_token').val(token); // Nếu dùng jQuery
+
+          // 2. Hiển thị modal loading / spinner (nếu có)
+          if (typeof $ !== 'undefined' && $('#myModal_ticket_loading').length) {
+            $("#myModal_ticket_loading").modal({
+              backdrop: 'static',
+              keyboard: false
+            });
+          }
+          
+          // 3. Tiến hành submit form thật lên backend
+          try {
+            form.submit();
+          } catch (err) {
+            alert("Có lỗi xảy ra! Vui lòng nhấn F5 và đăng nhập lại!");
+          }
+        });
+      });
+    });
+  });
+</script>`} />
+                  </div>
+                ),
+              },
+            ]}
+          />
 
           {/* Bước 4 */}
           <Title level={5} style={{ color: "#7367f0" }}>Bước 4 — Xác thực Token ở Backend (Server-to-Server dùng Secret Key)</Title>
@@ -840,48 +905,117 @@ Content-Type: application/json
             </tbody>
           </table>
 
-          <Title level={5}>Methods</Title>
+          <Title level={5}>Instance Methods & Static API</Title>
           <Paragraph type="secondary">
-            Các phương thức công khai (public methods) của instance NhanHoaCaptcha.
+            Các phương thức của instance và Static API để gọi chủ động (giống reCAPTCHA v3 / grecaptcha).
           </Paragraph>
           
-          <CodeBlock lang="js" code={`// captcha.reset()
+          <CodeBlock lang="js" code={`// 1. captcha.reset()
 // Khởi tạo lại tiến trình Captcha, xóa token cũ, phân tích rủi ro lại từ đầu và lấy token mới.
 // BẮT BUỘC DÙNG khi form submit bằng AJAX bị lỗi (vd: sai mật khẩu), để user có thể bấm Submit lại.
-captcha.reset();`} />
+captcha.reset();
 
-          <Title level={5}>Ví dụ đầy đủ với callback</Title>
+// 2. NhanHoaCaptcha.ready(callback)
+// Đảm bảo DOM và Script Captcha đã sẵn sàng trước khi thực thi
+NhanHoaCaptcha.ready(function() {
+  console.log("NhanHoaCaptcha đã sẵn sàng!");
+});
+
+// 3. NhanHoaCaptcha.execute(siteKey, options) -> Promise<string>
+// Lấy Token xác thực trực tiếp mà không cần thẻ container (reCAPTCHA v3 style)
+NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(function(token) {
+  console.log("Token nhận được:", token);
+});`} />
+
+          <Title level={5} style={{ marginTop: 24 }}>Ví dụ 1: Tự động (Container trong Form)</Title>
           <CodeBlock lang="html" code={`<!DOCTYPE html>
 <html>
 <head><title>Login</title></head>
 <body>
-  <form id="myForm">
-    <input type="email" name="email" />
-    <input type="password" name="password" />
+  <form id="myForm" action="/login" method="POST">
+    <input type="email" name="email" required />
+    <input type="password" name="password" required />
+    
+    <!-- Widget tự động quản lý -->
     <div id="vina-captcha-container"></div>
     <input type="hidden" id="vina_captcha_token" name="vina_captcha_token" />
+    
     <button type="submit">Đăng nhập</button>
   </form>
 
   <script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const captcha = new NhanHoaCaptcha('vina-captcha-container', {
+      new NhanHoaCaptcha('vina-captcha-container', {
         siteKey: 'YOUR_SITE_KEY_UUID',
         onSuccess: (token, score) => {
           document.getElementById('vina_captcha_token').value = token;
           console.log('Xác thực hợp lệ!', token, score);
-          // Form sẽ tự submit sau khi captcha pass
         },
         onError: (err) => {
           alert('Lỗi bảo mật: ' + err.message);
-          captcha.reset(); // Reset để thử lại
         }
       });
     });
   </script>
 </body>
 </html>`} />
+
+          <Title level={5} style={{ marginTop: 24 }}>Ví dụ 2: Chặn Form Submit & Gọi Chủ Động (reCAPTCHA v3 / jQuery / Loading Modal)</Title>
+          <Paragraph type="secondary">
+            Mẫu code chuẩn theo phong cách chặn sự kiện <Text code>submit</Text>, gọi <Text code>NhanHoaCaptcha.ready</Text> và <Text code>NhanHoaCaptcha.execute</Text>, gán token và mở modal loading trước khi submit:
+          </Paragraph>
+          <CodeBlock lang="html" code={`<!-- Nhúng script widget ở header hoặc trước </body> -->
+<script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
+
+<form id="login" action="/login" method="POST">
+  <input type="text" name="username" placeholder="Tên đăng nhập" required />
+  <input type="password" name="password" placeholder="Mật khẩu" required />
+  
+  <!-- Field ẩn lưu token captcha -->
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+  
+  <button type="submit" class="btn btn-primary">Đăng Nhập</button>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 1. Chặn sự kiện submit form mặc định
+    document.querySelector("form#login").addEventListener("submit", function(e) {
+      e.preventDefault(); 
+      const form = document.getElementById('login');
+      
+      // 2. Chờ Captcha sẵn sàng và thực thi lấy Token
+      NhanHoaCaptcha.ready(function () {
+        NhanHoaCaptcha.execute('YOUR_PUBLIC_SITE_KEY_UUID', { action: 'login' }).then(function (token) {
+          if (!token) {
+            alert("Xác thực Captcha thất bại. Vui lòng thử lại.");
+            return;
+          }
+
+          // 3. Gán token nhận được vào input ẩn của form
+          document.getElementById('vina_captcha_token').value = token;
+          // Hoặc dùng jQuery: $('#vina_captcha_token').val(token);
+
+          // 4. Hiển thị modal loading / spinner chờ phản hồi từ server (nếu có)
+          if (typeof $ !== 'undefined' && $('#myModal_ticket_loading').length) {
+            $("#myModal_ticket_loading").modal({
+              backdrop: 'static',
+              keyboard: false
+            });
+          }
+          
+          // 5. Tiến hành submit form lên backend
+          try {
+            form.submit();
+          } catch (err) {
+            alert("Có lỗi xảy ra! Vui lòng nhấn F5 và đăng nhập lại!");
+          }
+        });
+      });
+    });
+  });
+</script>`} />
         </div>
       ),
     },

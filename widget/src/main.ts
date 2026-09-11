@@ -794,6 +794,56 @@ class NhanHoaCaptcha {
     const tokenInput = this.form?.querySelector<HTMLInputElement>('input[name="vina_captcha_token"]');
     if (tokenInput) tokenInput.value = '';
   }
+
+  // ─── Static Programmatic API (reCAPTCHA v3 Drop-in Style) ───────────────────
+
+  public static ready(callback: () => void): void {
+    if (typeof document === 'undefined') return;
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(callback, 1);
+    } else {
+      document.addEventListener('DOMContentLoaded', callback);
+    }
+  }
+
+  public static async execute(
+    siteKeyOrConfig: string | NhanHoaCaptchaConfig,
+    options?: { action?: string; forceChallenge?: 'none' | 'slider' | 'pow'; baseUrl?: string }
+  ): Promise<string> {
+    const siteKey = typeof siteKeyOrConfig === 'string' ? siteKeyOrConfig : siteKeyOrConfig.siteKey;
+    const baseUrl =
+      (typeof siteKeyOrConfig === 'object' && siteKeyOrConfig.baseUrl) ||
+      options?.baseUrl ||
+      getDefaultBaseUrl();
+
+    if (typeof document === 'undefined') return '';
+
+    const virtualContainer = document.createElement('div');
+    virtualContainer.id = `nhanhoa-captcha-exec-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    virtualContainer.style.display = 'none';
+    document.body.appendChild(virtualContainer);
+
+    try {
+      const instance = new NhanHoaCaptcha(virtualContainer.id, {
+        siteKey,
+        baseUrl,
+        hideBadge: true,
+        forceChallenge: options?.forceChallenge,
+      });
+
+      const res = await instance.execute({
+        forceChallenge: options?.forceChallenge,
+        customSignals: options?.action ? { action: options.action } : undefined,
+      });
+
+      virtualContainer.remove();
+      return res.success && res.verify_token ? res.verify_token : '';
+    } catch (err) {
+      virtualContainer.remove();
+      console.error('[NhanHoaCaptcha] Programmatic execute failed:', err);
+      return '';
+    }
+  }
 }
 
 // Gán trực tiếp vào global window (hỗ trợ cả NhanHoaCaptcha và alias VinaCaptcha)

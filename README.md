@@ -126,13 +126,23 @@ Hệ thống tuân thủ chuẩn bảo mật phân tách 2 khóa độc lập:
 
 ## 🚀 6. Hướng Dẫn Tích Hợp Đa Nền Tảng
 
-### **Bước 1: Phía Frontend / Client (Dùng Public Site Key)**
+### **Bước 1: Phía Frontend / Client (Dùng Public Site Key UUID)**
 
-Nhúng đoạn mã sau vào form HTML của website:
+Bạn có thể lựa chọn 1 trong 2 cách tích hợp phía Frontend:
 
+#### 🔹 **Cách 1: Nhúng Tự Động (Khuyến nghị cho Form thông thường)**
+Đặt thẻ container vào form HTML và khởi tạo:
 ```html
-<!-- 1. Container captcha đặt bên trong thẻ <form> -->
-<div id="vina-captcha-container"></div>
+<form id="login-form" action="/login" method="POST">
+  <input type="text" name="username" placeholder="Username" required />
+  <input type="password" name="password" placeholder="Password" required />
+
+  <!-- 1. Container captcha đặt bên trong thẻ <form> -->
+  <div id="vina-captcha-container"></div>
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+
+  <button type="submit">Đăng nhập</button>
+</form>
 
 <!-- 2. Nhúng Script Widget (< 6.5KB gzip) -->
 <script src="https://captcha.domaincuaban.com/widget/vina-captcha.js" defer></script>
@@ -141,8 +151,67 @@ Nhúng đoạn mã sau vào form HTML của website:
     new NhanHoaCaptcha("vina-captcha-container", {
       siteKey: "YOUR_PUBLIC_SITE_KEY_UUID", // Site Key UUID lấy từ Dashboard
       onSuccess: function(token, score) {
+        document.getElementById("vina_captcha_token").value = token;
         console.log("Xác thực hoàn tất! Token:", token);
       }
+    });
+  });
+</script>
+```
+
+---
+
+#### 🔹 **Cách 2: Chặn & Gọi Chủ Động Khi Submit Form (reCAPTCHA v3 / jQuery / Loading Modal)**
+Phù hợp cho các form cần hiện Loading Spinner, Modal hoặc xử lý AJAX trước khi submit:
+```html
+<!-- 1. Nhúng Script Widget -->
+<script src="https://captcha.domaincuaban.com/widget/vina-captcha.js" defer></script>
+
+<form id="login" action="/login" method="POST">
+  <input type="text" name="username" placeholder="Tên đăng nhập" required />
+  <input type="password" name="password" placeholder="Mật khẩu" required />
+  
+  <!-- Field ẩn lưu token captcha -->
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+  
+  <button type="submit" class="btn btn-primary">Đăng Nhập</button>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 1. Chặn sự kiện submit form mặc định
+    document.querySelector("form#login").addEventListener("submit", function(e) {
+      e.preventDefault(); 
+      const form = document.getElementById('login');
+      
+      // 2. Chờ Captcha sẵn sàng và thực thi lấy Token (reCAPTCHA v3 style)
+      NhanHoaCaptcha.ready(function () {
+        NhanHoaCaptcha.execute('YOUR_PUBLIC_SITE_KEY_UUID', { action: 'login' }).then(function (token) {
+          if (!token) {
+            alert("Xác thực Captcha thất bại. Vui lòng thử lại.");
+            return;
+          }
+
+          // 3. Gán token vào input ẩn
+          document.getElementById('vina_captcha_token').value = token;
+          // Hoặc dùng jQuery: $('#vina_captcha_token').val(token);
+
+          // 4. Hiển thị modal loading (nếu có)
+          if (typeof $ !== 'undefined' && $('#myModal_ticket_loading').length) {
+            $("#myModal_ticket_loading").modal({
+              backdrop: 'static',
+              keyboard: false
+            });
+          }
+          
+          // 5. Tiến hành submit form
+          try {
+            form.submit();
+          } catch (err) {
+            alert("Có lỗi xảy ra! Vui lòng nhấn F5 và đăng nhập lại!");
+          }
+        });
+      });
     });
   });
 </script>
