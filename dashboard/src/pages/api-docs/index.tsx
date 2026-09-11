@@ -13,7 +13,7 @@ import {
 
 const { Title, Text, Paragraph } = Typography;
 
-const BASE_URL = "https://captcha.nhanhoa.com"; // Production URL — đổi lại khi deploy
+const BASE_URL = typeof window !== "undefined" && window.location ? window.location.origin : "http://localhost:3068";
 
 const SKILL_MD_TEXT = `---
 name: vina-captcha-integration
@@ -26,20 +26,30 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 ---
 
-## 1. Nguyên Lý Tích Hợp (2 Bước Bắt Buộc)
+## 1. Mô hình 2 Khóa Bảo Mật (2-Key Architecture)
+
+| Loại Khóa | Nơi Lưu Trữ | Giá Trị Ví Dụ | Mục Đích |
+| :--- | :--- | :--- | :--- |
+| 🟢 **Public Site Key** | Frontend HTML / JS / Mobile App | UUID: \`0119c349-a104-4dd2-b4c5-...\` | Khởi tạo Widget & lấy challenge từ VinaCaptcha. Được bảo vệ bởi Domain Whitelist. |
+| 🔴 **Private Secret Key** | Server Backend (.env) | \`cap_live_90ee9772f1e3...\` | Server backend dùng để gọi \`/v1/siteverify\` xác minh token. **Tuyệt đối không để lộ ở client.** |
+
+---
+
+## 2. Nguyên Lý Tích Hợp (2 Bước Bắt Buộc)
 
 1. **Frontend (Client)**:
    - Nhúng Widget JS \`vina-captcha.js\` vào form.
-   - Khi user tương tác/submit form, Widget tự động tạo một \`verify_token\` ngắn hạn (60s) gắn vào field ẩn \`vina_captcha_token\` trong form.
+   - Khởi tạo Widget bằng **Public Site Key (UUID)**: \`new VinaCaptcha("container-id", "YOUR_SITE_KEY_UUID")\`.
+   - Khi user submit form, Widget tự động tạo \`verify_token\` ngắn hạn (60s) gắn vào field ẩn \`vina_captcha_token\` trong form.
 2. **Backend (Server)**:
-   - Server nhận \`vina_captcha_token\` từ request client.
-   - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret_key\` để xác minh token hợp lệ.
+   - Server nhận \`vina_captcha_token\` từ request submit của client.
+   - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\`.
    - Nếu \`success: true\` → Cho phép xử lý tiếp (Login, Register, Thanh toán...).
    - Nếu \`success: false\` → Chặn và báo lỗi "Xác thực Captcha thất bại".
 
 ---
 
-## 2. Mã Mẫu Tích Hợp Cho Từng Nền Tảng
+## 3. Mã Mẫu Tích Hợp Cho Từng Nền Tảng
 
 ### 🚀 1. PHP / Laravel Framework
 
@@ -56,10 +66,9 @@ class VinaCaptcha implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        $response = Http::asJson()->post(config('services.vinacaptcha.base_url', 'https://captcha.nhanhoa.com') . '/v1/siteverify', [
-            'secret_key' => config('services.vinacaptcha.secret_key'),
-            'token' => $value,
-            'remoteip' => request()->ip(),
+        $response = Http::asJson()->post(config('services.vinacaptcha.base_url', 'https://your-captcha-domain.com') . '/v1/siteverify', [
+            'secret'       => config('services.vinacaptcha.secret_key'), // cap_live_...
+            'verify_token' => $value,
         ]);
 
         if (!$response->successful() || !($response->json('success') ?? false)) {
@@ -92,26 +101,20 @@ Thêm đoạn code sau vào file \`functions.php\` của theme đang dùng:
 \`\`\`php
 // 1. Nhúng Widget JS vào trang Login / Register
 add_action('login_enqueue_scripts', function() {
-    wp_enqueue_script('vina-captcha', 'https://captcha.nhanhoa.com/widget/vina-captcha.js', [], null, true);
+    wp_enqueue_script('vina-captcha', 'https://your-captcha-domain.com/widget/vina-captcha.js', [], null, true);
 });
 
-// 2. Thêm container vào Form Login
+// 2. Thêm container vào Form Login (dùng Public Site Key UUID)
 add_action('login_form', function() {
-    echo '<div id="vinacaptcha-box" style="margin-bottom: 16px;"></div>';
-    echo '<input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />';
+    echo '<div id="vina-captcha-box" style="margin-bottom: 16px;"></div>';
     echo '<script>
         document.addEventListener("DOMContentLoaded", function() {
-            new VinaCaptcha("vinacaptcha-box", {
-                siteKey: "YOUR_SITE_API_KEY",
-                onSuccess: function(token) {
-                    document.getElementById("vina_captcha_token").value = token;
-                }
-            });
+            new VinaCaptcha("vina-captcha-box", "YOUR_PUBLIC_SITE_KEY_UUID");
         });
     </script>';
 });
 
-// 3. Xác thực Token trước khi cho phép Login
+// 3. Xác thực Token trước khi cho phép Login (dùng Secret Key cap_live_...)
 add_filter('authenticate', function($user, $username, $password) {
     if (empty($username) || empty($password)) return $user;
 
@@ -120,12 +123,11 @@ add_filter('authenticate', function($user, $username, $password) {
         return new WP_Error('captcha_missing', '<strong>Lỗi</strong>: Vui lòng hoàn thành xác thực Captcha.');
     }
 
-    $response = wp_remote_post('https://captcha.nhanhoa.com/v1/siteverify', [
+    $response = wp_remote_post('https://your-captcha-domain.com/v1/siteverify', [
         'headers' => ['Content-Type' => 'application/json'],
         'body' => json_encode([
-            'secret_key' => 'YOUR_SECRET_KEY',
-            'token' => $token,
-            'remoteip' => $_SERVER['REMOTE_ADDR'] ?? ''
+            'secret'       => 'cap_live_YOUR_SECRET_KEY',
+            'verify_token' => $token,
         ]),
         'timeout' => 5
     ]);
@@ -155,20 +157,22 @@ import { Request, Response, NextFunction } from 'express';
 export async function verifyVinaCaptcha(req: Request, res: Response, next: NextFunction) {
   const token = req.body.vina_captcha_token || req.headers['x-vina-token'];
   if (!token) {
-    return res.status(400).json({ error: 'Missing VinaCaptcha token' });
+    return res.status(400).json({ error: 'Missing VinaCaptcha token (vina_captcha_token)' });
   }
 
   try {
-    const response = await axios.post('https://captcha.nhanhoa.com/v1/siteverify', {
-      secret_key: process.env.VINACAPTCHA_SECRET_KEY,
-      token,
-      remoteip: req.ip,
+    const response = await axios.post('https://your-captcha-domain.com/v1/siteverify', {
+      secret: process.env.VINACAPTCHA_SECRET_KEY, // cap_live_...
+      verify_token: token,
     });
 
     if (response.data?.success) {
+      // Gắn thông tin score vào request để controller có thể kiểm tra thêm nếu cần
+      (req as any).captchaScore = response.data.score;
+      (req as any).captchaRiskLevel = response.data.risk_level;
       return next();
     }
-    return res.status(403).json({ error: 'Captcha verification failed' });
+    return res.status(403).json({ error: 'Captcha verification failed', reason: response.data?.reason });
   } catch (err) {
     return res.status(500).json({ error: 'Captcha verification server error' });
   }
@@ -184,14 +188,14 @@ export async function verifyVinaCaptcha(req: Request, res: Response, next: NextF
 import httpx
 from fastapi import HTTPException, Header, Body
 
-VINACAPTCHA_VERIFY_URL = "https://captcha.nhanhoa.com/v1/siteverify"
-SECRET_KEY = "YOUR_SECRET_KEY"
+VINACAPTCHA_VERIFY_URL = "https://your-captcha-domain.com/v1/siteverify"
+SECRET_KEY = "cap_live_YOUR_SECRET_KEY"
 
 async def verify_captcha(vina_captcha_token: str = Body(..., embed=True)):
     async with httpx.AsyncClient() as client:
         res = await client.post(VINACAPTCHA_VERIFY_URL, json={
-            "secret_key": SECRET_KEY,
-            "token": vina_captcha_token
+            "secret": SECRET_KEY,
+            "verify_token": vina_captcha_token
         })
         data = res.json()
         if not data.get("success"):
@@ -319,7 +323,7 @@ export const ApiDocsPage = () => {
             type="info"
             icon={<SafetyOutlined />}
             showIcon
-            message="Yêu cầu: Bạn cần có API Key. Vào mục Quản lý Sites → Tạo Site → Tạo API Key để lấy."
+            message="Mô hình 2 Khóa: Dùng Public Site Key (UUID) cho mã HTML/JS ở client, và Secret Key (cap_live_...) cho Server Backend đối soát qua /v1/siteverify."
             style={{ marginBottom: 24 }}
           />
 
@@ -335,25 +339,25 @@ export const ApiDocsPage = () => {
   <input type="password" name="password" placeholder="Mật khẩu" required />
 
   <!-- Container captcha — đặt ngay trước nút Submit -->
-  <div id="vinacaptcha-container"></div>
+  <div id="vina-captcha-container"></div>
 
-  <!-- Hidden input sẽ được Widget tự điền khi pass -->
-  <input type="hidden" name="vina_token" id="vina_token" />
+  <!-- Hidden input sẽ được Widget tự động điền khi pass -->
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
 
   <button type="submit">Đăng nhập</button>
 </form>`} />
 
           {/* Bước 3 */}
-          <Title level={5} style={{ color: "#7367f0" }}>Bước 3 — Khởi tạo Widget</Title>
+          <Title level={5} style={{ color: "#7367f0" }}>Bước 3 — Khởi tạo Widget (Dùng Public Site Key)</Title>
           <CodeBlock lang="js" code={`<script>
   document.addEventListener('DOMContentLoaded', () => {
-    const captcha = new VinaCaptcha('vinacaptcha-container', {
-      siteKey: 'cap_live_YOUR_API_KEY_HERE',  // Thay bằng API Key thật
+    // Khởi tạo Widget bằng Public Site Key (UUID) lấy từ mục Quản lý Sites
+    const captcha = new VinaCaptcha('vina-captcha-container', {
+      siteKey: 'YOUR_SITE_KEY_UUID',  // Thay bằng Site Key UUID thật của bạn
       baseUrl: '${BASE_URL}',
-      onSuccess: (token) => {
-        // Widget tự điền vào hidden input #vina_token
-        document.getElementById('vina_token').value = token;
-        console.log('Captcha pass! Token:', token);
+      onSuccess: (token, score) => {
+        // Widget tự điền vào hidden input #vina_captcha_token
+        console.log('Captcha pass! Token:', token, 'Score:', score);
       },
       onError: (err) => {
         console.error('Captcha lỗi:', err);
@@ -364,10 +368,10 @@ export const ApiDocsPage = () => {
 </script>`} />
 
           {/* Bước 4 */}
-          <Title level={5} style={{ color: "#7367f0" }}>Bước 4 — Xác thực Token ở Backend (Server-to-Server)</Title>
+          <Title level={5} style={{ color: "#7367f0" }}>Bước 4 — Xác thực Token ở Backend (Server-to-Server dùng Secret Key)</Title>
           <Paragraph type="secondary">
-            Sau khi user submit form, server của bạn nhận được <Text code>vina_token</Text>. 
-            Phải gọi <Text code>/v1/siteverify</Text> để xác nhận token hợp lệ — <strong>không bao giờ tin vào token từ phía client</strong>.
+            Sau khi user submit form, server backend nhận được <Text code>vina_captcha_token</Text>. 
+            Phải gọi <Text code>/v1/siteverify</Text> kèm <Text code>secret</Text> (<Text code>cap_live_...</Text>) để xác nhận token hợp lệ — <strong>tuyệt đối không để lộ secret key ở client</strong>.
           </Paragraph>
 
           <Tabs
@@ -376,28 +380,32 @@ export const ApiDocsPage = () => {
             items={[
               {
                 key: "nodejs",
-                label: "Node.js",
+                label: "Node.js (Express)",
                 children: (
                   <CodeBlock lang="js" code={`const verifyToken = async (vinaToken, siteSecretKey) => {
   const resp = await fetch('${BASE_URL}/v1/siteverify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      secret: siteSecretKey,    // API Key của bạn (giữ bí mật ở server)
-      verify_token: vinaToken   // Token nhận từ form submit
+      secret: siteSecretKey,             // Khóa bí mật Server (cap_live_...)
+      verify_token: vinaToken            // Token nhận từ client submit
     })
   });
   const data = await resp.json();
-  return data.success === true;
+  return data;
 };
 
 // Trong route xử lý login:
 app.post('/login', async (req, res) => {
-  const vinaToken = req.body.vina_token;
-  const isValid = await verifyToken(vinaToken, process.env.VINA_SECRET_KEY);
-  if (!isValid) {
-    return res.status(400).json({ error: 'Captcha không hợp lệ hoặc đã hết hạn' });
+  const vinaToken = req.body.vina_captcha_token;
+  const result = await verifyToken(vinaToken, process.env.VINACAPTCHA_SECRET_KEY);
+  
+  if (!result.success) {
+    return res.status(400).json({ error: 'Captcha không hợp lệ hoặc đã hết hạn', reason: result.reason });
   }
+  
+  // Xác thực thành công! Điểm đánh giá: result.score, mức độ: result.risk_level
+  console.log('Xác thực hợp lệ từ hostname:', result.hostname, 'Score:', result.score);
   // Tiếp tục xử lý đăng nhập...
 });`} />
                 ),
@@ -407,9 +415,9 @@ app.post('/login', async (req, res) => {
                 label: "PHP",
                 children: (
                   <CodeBlock lang="php" code={`<?php
-function verifyVinaCaptcha(string $vinaToken, string $siteSecret): bool {
+function verifyVinaCaptcha(string $vinaToken, string $siteSecret): array {
     $payload = json_encode([
-        'secret'       => $siteSecret,
+        'secret'       => $siteSecret,  // cap_live_...
         'verify_token' => $vinaToken,
     ]);
 
@@ -422,16 +430,16 @@ function verifyVinaCaptcha(string $vinaToken, string $siteSecret): bool {
     ]);
 
     $result = file_get_contents('${BASE_URL}/v1/siteverify', false, $context);
-    if ($result === false) return false;
+    if ($result === false) return ['success' => false];
 
-    $data = json_decode($result, true);
-    return ($data['success'] ?? false) === true;
+    return json_decode($result, true) ?: ['success' => false];
 }
 
 // Trong form handler:
-if (!verifyVinaCaptcha($_POST['vina_token'], $_ENV['VINA_SECRET_KEY'])) {
+$verify = verifyVinaCaptcha($_POST['vina_captcha_token'] ?? '', $_ENV['VINACAPTCHA_SECRET_KEY']);
+if (empty($verify['success'])) {
     http_response_code(400);
-    echo json_encode(['error' => 'Captcha không hợp lệ']);
+    echo json_encode(['error' => 'Captcha không hợp lệ hoặc đã hết hạn']);
     exit;
 }
 // Tiếp tục xử lý...`} />
@@ -439,27 +447,27 @@ if (!verifyVinaCaptcha($_POST['vina_token'], $_ENV['VINA_SECRET_KEY'])) {
               },
               {
                 key: "python",
-                label: "Python",
+                label: "Python (FastAPI / Flask)",
                 children: (
                   <CodeBlock lang="python" code={`import requests, os
 
-def verify_vina_captcha(vina_token: str) -> bool:
+def verify_vina_captcha(vina_token: str) -> dict:
     resp = requests.post(
         '${BASE_URL}/v1/siteverify',
         json={
-            'secret': os.environ['VINA_SECRET_KEY'],
+            'secret': os.environ.get('VINACAPTCHA_SECRET_KEY'), # cap_live_...
             'verify_token': vina_token,
         },
         timeout=5
     )
-    data = resp.json()
-    return data.get('success') is True
+    return resp.json()
 
 # Django/Flask view:
 @app.route('/login', methods=['POST'])
 def login():
-    vina_token = request.form.get('vina_token', '')
-    if not verify_vina_captcha(vina_token):
+    vina_token = request.form.get('vina_captcha_token', '')
+    res = verify_vina_captcha(vina_token)
+    if not res.get('success'):
         return jsonify({'error': 'Captcha không hợp lệ'}), 400
     # Tiếp tục xử lý...`} />
                 ),
@@ -473,15 +481,16 @@ def login():
             Token của VinaCaptcha là dạng <strong>one-time-use (sử dụng một lần)</strong>. Nếu form của bạn gửi bằng AJAX (không reload trang) và bị lỗi (vd: sai mật khẩu), bạn bắt buộc phải gọi hàm <Text code>reset()</Text> để Captcha đánh giá lại rủi ro và sinh token mới.
           </Paragraph>
           <CodeBlock lang="js" code={`// Lấy instance captcha đã khởi tạo từ trước
-const captcha = new VinaCaptcha('vinacaptcha-container', { siteKey: '...' });
+const captcha = new VinaCaptcha('vina-captcha-container', 'YOUR_SITE_KEY_UUID');
 
 async function handleAjaxSubmit() {
-  const token = document.getElementById('vina_token').value;
+  const token = document.getElementById('vina_captcha_token').value;
   
   try {
     const res = await fetch('/api/login', { 
       method: 'POST', 
-      body: JSON.stringify({ vina_token: token, username: '...' }) 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vina_captcha_token: token, username: '...' }) 
     });
     
     if (!res.ok) {
@@ -512,18 +521,19 @@ async function handleAjaxSubmit() {
       ),
       children: (
         <div>
-          <Title level={4}>Public API — Widget gọi trực tiếp</Title>
+          <Title level={4}>Public API — Widget & Server Siteverify</Title>
           <Paragraph type="secondary">
-            Base URL: <Text code>{BASE_URL}</Text> — Auth bằng header <Text code>X-Api-Key</Text>
+            Base URL: <Text code>{BASE_URL}</Text> — Hỗ trợ Header <Text code>X-Site-Key</Text> (Public Key) hoặc <Text code>X-Api-Key</Text>
           </Paragraph>
 
-          <EndpointCard method="POST" path="/v1/issue" desc="Gọi khi form load, đánh giá rủi ro và cấp session">
+          <EndpointCard method="POST" path="/v1/issue" desc="Gọi khi form load, đánh giá rủi ro và cấp session thử thách">
             <Divider style={{ margin: "10px 0" }} />
             <Row gutter={24}>
               <Col xs={24} md={12}>
                 <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>REQUEST</Text>
                 <CodeBlock lang="json" code={`// Header
-X-Api-Key: cap_live_xxxxxxxxxxxx
+X-Site-Key: 0119c349-a104-4dd2-b4c5-214c6656a481
+Content-Type: application/json
 
 // Body
 {
@@ -546,33 +556,30 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
   "session_id": "8f2a1c3e-...",
   "challenge_type": "none",
   "pow_difficulty": null,
+  "slider_data": null,
   "expires_in": 60
 }
 
 // challenge_type có thể là:
-// "none"   → pass ngay, không cần thử thách
-// "slider" → yêu cầu kéo thanh trượt
-// "pow"    → Proof-of-Work, pow_difficulty = 12-18`} />
+// "none"   → pass ngay, không popup
+// "slider" → yêu cầu kéo thanh trượt ghép hình
+// "pow"    → Proof-of-Work ngầm`} />
               </Col>
             </Row>
           </EndpointCard>
 
-          <EndpointCard method="POST" path="/v1/verify" desc="Gọi sau khi user hoàn thành challenge, nhận verify_token">
+          <EndpointCard method="POST" path="/v1/verify" desc="Gọi sau khi giải quyết challenge để nhận verify_token">
             <Divider style={{ margin: "10px 0" }} />
             <Row gutter={24}>
               <Col xs={24} md={12}>
                 <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>REQUEST</Text>
-                <CodeBlock lang="json" code={`// Nếu challenge_type = "none":
-{
-  "session_id": "8f2a1c3e-..."
-}
-
-// Nếu challenge_type = "slider":
+                <CodeBlock lang="json" code={`// Nếu challenge_type = "slider":
 {
   "session_id": "8f2a1c3e-...",
   "challenge_response": {
     "type": "slider",
-    "final_position": 187
+    "final_position": 187,
+    "drag_duration_ms": 850
   }
 }
 
@@ -581,8 +588,13 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
   "session_id": "8f2a1c3e-...",
   "challenge_response": {
     "type": "pow",
-    "nonce": "0000a3f9..."
+    "nonce": "128492"
   }
+}
+
+// Nếu challenge_type = "none":
+{
+  "session_id": "8f2a1c3e-..."
 }`} />
               </Col>
               <Col xs={24} md={12}>
@@ -590,13 +602,13 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
                 <CodeBlock lang="json" code={`// Pass:
 {
   "result": "pass",
-  "verify_token": "vt_9f8e7d..."
+  "verify_token": "vt_9f8e7d82b4c1..."
 }
 
 // Fail:
 {
   "result": "fail",
-  "reason": "challenge_incorrect"
+  "reason": "slider_position_incorrect"
 }
 
 // Hết hạn session:
@@ -608,14 +620,14 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
             </Row>
           </EndpointCard>
 
-          <EndpointCard method="POST" path="/v1/siteverify" desc="Server-to-server — Backend site khách xác nhận token">
+          <EndpointCard method="POST" path="/v1/siteverify" desc="Server-to-Server — Backend site khách xác nhận token với Secret Key">
             <Divider style={{ margin: "10px 0" }} />
             <Row gutter={24}>
               <Col xs={24} md={12}>
                 <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>REQUEST (từ backend của bạn)</Text>
                 <CodeBlock lang="json" code={`{
-  "secret": "cap_live_YOUR_API_KEY",
-  "verify_token": "vt_9f8e7d..."
+  "secret": "cap_live_90ee9772f1e376bd801a2f1c",
+  "verify_token": "vt_9f8e7d82b4c1..."
 }`} />
               </Col>
               <Col xs={24} md={12}>
@@ -623,8 +635,10 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
                 <CodeBlock lang="json" code={`// Hợp lệ:
 {
   "success": true,
-  "timestamp": "2026-09-08T16:00:00Z",
-  "hostname": "shop.example.com"
+  "score": 15,
+  "risk_level": "low",
+  "hostname": "shop.example.com",
+  "timestamp": "2026-09-11T11:00:00.000Z"
 }
 
 // Đã dùng / không hợp lệ:
@@ -704,9 +718,9 @@ X-Api-Key: cap_live_xxxxxxxxxxxx
             </thead>
             <tbody>
               {[
-                ["siteKey", "string", "✅", "API Key lấy từ Dashboard"],
+                ["siteKey", "string", "✅", "Public Site Key (UUID) lấy từ mục Quản lý Sites"],
                 ["baseUrl", "string", "❌", `URL backend, mặc định: ${BASE_URL}`],
-                ["onSuccess", "function(token)", "❌", "Callback khi captcha pass, nhận verify_token"],
+                ["onSuccess", "function(token, score)", "❌", "Callback khi captcha pass, nhận verify_token và risk score"],
                 ["onError", "function(error)", "❌", "Callback khi có lỗi"],
                 ["debug", "boolean", "❌", "Bật console log chi tiết (tắt trên production)"],
               ].map(([name, type, req, desc]) => (
@@ -738,18 +752,19 @@ captcha.reset();`} />
   <form id="myForm">
     <input type="email" name="email" />
     <input type="password" name="password" />
-    <div id="vinacaptcha-container"></div>
-    <input type="hidden" id="vina_token" name="vina_token" />
+    <div id="vina-captcha-container"></div>
+    <input type="hidden" id="vina_captcha_token" name="vina_captcha_token" />
     <button type="submit">Đăng nhập</button>
   </form>
 
   <script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const captcha = new VinaCaptcha('vinacaptcha-container', {
-        siteKey: 'cap_live_YOUR_KEY',
-        onSuccess: (token) => {
-          document.getElementById('vina_token').value = token;
+      const captcha = new VinaCaptcha('vina-captcha-container', {
+        siteKey: 'YOUR_SITE_KEY_UUID',
+        onSuccess: (token, score) => {
+          document.getElementById('vina_captcha_token').value = token;
+          console.log('Xác thực hợp lệ!', token, score);
           // Form sẽ tự submit sau khi captcha pass
         },
         onError: (err) => {

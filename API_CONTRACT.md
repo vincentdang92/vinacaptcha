@@ -8,17 +8,18 @@ Không được gộp 2 nhóm này chung middleware auth.
 
 ---
 
-## 1. Public API — widget
+## 1. Public API — widget & backend siteverify
 
 ### 1.1 `POST /v1/issue`
 
-Gọi khi widget load, trước khi user submit form.
+Gọi khi widget load hoặc user submit form để đánh giá rủi ro và cấp session thử thách.
 
 **Headers**
-```
-X-Api-Key: cap_live_xxxxxxxxxxxx
+```http
+X-Site-Key: 0119c349-a104-4dd2-b4c5-214c6656a481   (hoặc X-Api-Key)
 Content-Type: application/json
 ```
+*(Hỗ trợ cả Public Site Key UUID hoặc API Key Prefix. Request được kiểm tra đối soát với Domain Whitelist).*
 
 **Request body**
 ```json
@@ -28,8 +29,12 @@ Content-Type: application/json
   "client_signals": {
     "webdriver": false,
     "canvas_fingerprint": "a1b2c3...",
-    "time_on_page_ms": 4200
-  }
+    "time_on_page_ms": 4200,
+    "mouse_moves": 34,
+    "mouse_clicks": 2,
+    "key_strokes": 18
+  },
+  "client_reported_ip": "14.185.x.x"
 }
 ```
 
@@ -39,21 +44,24 @@ Content-Type: application/json
   "session_id": "8f2a1c3e-...",
   "challenge_type": "none",
   "pow_difficulty": null,
-  "expires_in": 45
+  "slider_data": null,
+  "expires_in": 60
 }
 ```
-- `challenge_type`: `none` | `slider` | `pow`. Nếu `pow`, kèm thêm `pow_difficulty` (số leading zero bits yêu cầu).
-- `expires_in`: giây, khớp với TTL token ở Redis (30–60s theo ARCHITECTURE.md 3.2).
+- `challenge_type`: `none` | `slider` | `pow`. 
+- Nếu `slider`: trả kèm `slider_data: { y: number, seed: number, puzzle_size: number }`.
+- Nếu `pow`: trả kèm `pow_difficulty` (số leading zero bits yêu cầu, vd: 12).
+- `expires_in`: giây, khớp với TTL token ở Redis (60s theo ARCHITECTURE.md 3.2).
 
 **Response lỗi**
-| Code | Khi nào |
-|---|---|
-| 401 | API key sai/revoked |
-| 403 | `domain` không nằm trong `allowed_domains` của site |
-| 429 | Vượt rate limit theo site/IP |
+| Code | Error Code | Khi nào |
+|---|---|---|
+| 401 | `missing_site_key` / `invalid_site_key` | Thiếu header hoặc Site Key sai/revoked/bị khóa |
+| 403 | `domain_not_allowed` | `domain` không nằm trong `allowed_domains` của site |
+| 429 | `quota_exceeded` / `rate_limit_exceeded` | Vượt hạn mức gói cước tháng hoặc rate limit |
 
 ```json
-{ "error": { "code": "domain_not_allowed", "message": "Domain không nằm trong whitelist của site" } }
+{ "error": { "code": "domain_not_allowed", "message": "Nguồn gốc request (Domain/Bundle ID) không nằm trong whitelist" } }
 ```
 
 ### 1.2 `POST /v1/verify`
@@ -62,53 +70,89 @@ Gọi sau khi user hoàn thành challenge (hoặc ngay lập tức nếu `challe
 
 **Request body**
 ```json
+// Với challenge_type = "slider":
 {
   "session_id": "8f2a1c3e-...",
   "challenge_response": {
     "type": "slider",
-    "final_position": 187
+    "final_position": 187,
+    "drag_duration_ms": 850,
+    "trajectory": [{"x": 0, "y": 50, "t": 0}, {"x": 187, "y": 50, "t": 850}]
   }
 }
+
+// Với challenge_type = "pow":
+{
+  "session_id": "8f2a1c3e-...",
+  "challenge_response": {
+    "type": "pow",
+    "nonce": "128492"
+  }
+}
+
+// Với challenge_type = "none":
+{
+  "session_id": "8f2a1c3e-..."
+}
 ```
-- Nếu `challenge_type` là `pow`: `challenge_response` chứa `{ "type": "pow", "nonce": "..." }`.
-- Nếu `none`: có thể bỏ trống `challenge_response`.
 
 **Response 200 — pass**
 ```json
 {
   "result": "pass",
-  "verify_token": "vt_9f8e7d..."
+  "verify_token": "vt_9f8e7d82b4c1..."
 }
 ```
-`verify_token` là token 1 lần, backend của site khách dùng để xác nhận lại server-to-server (mục 1.3) — KHÔNG tự tin vào response này từ phía client, giống cơ chế reCAPTCHA siteverify.
+`verify_token` là token 1 lần (TTL 60s), backend của site khách dùng để xác nhận lại server-to-server (mục 1.3).
 
 **Response — fail/expired**
 ```json
-{ "result": "fail", "reason": "challenge_incorrect" }
+{ "result": "fail", "reason": "slider_position_incorrect" }
 ```
 ```json
 { "result": "expired", "reason": "session_expired" }
 ```
 
-### 1.3 `POST /v1/siteverify` (server-to-server, site khách gọi từ backend của họ)
+### 1.3 `POST /v1/siteverify` (Server-to-Server)
+
+Máy chủ backend của khách hàng gọi sang VinaCaptcha để đối soát tính hợp lệ của token.
 
 **Request body**
 ```json
 {
-  "secret": "site_secret_key",
-  "verify_token": "vt_9f8e7d..."
+  "secret": "cap_live_90ee9772f1e376bd801a2f1c",
+  "verify_token": "vt_9f8e7d82b4c1..."
 }
 ```
 
-**Response**
+**Response 200 — Thành công**
 ```json
 {
   "success": true,
-  "timestamp": "2026-09-07T10:22:31Z",
-  "hostname": "shop.example.com"
+  "score": 15,
+  "risk_level": "low",
+  "hostname": "shop.example.com",
+  "timestamp": "2026-09-11T11:00:00.000Z"
 }
 ```
-- `verify_token` chỉ dùng được 1 lần — gọi lần 2 trả `success: false, reason: "already_used"`.
+- `score`: Điểm rủi ro từ 0 (cực kỳ an toàn) đến 100 (nguy cơ cao là bot).
+- `risk_level`: `"low"` (0–29) | `"medium"` (30–69) | `"high"` (70–100).
+- `verify_token` chỉ dùng được duy nhất 1 lần (One-Time Token trong Redis) — gọi lần 2 sẽ trả về `success: false, reason: "already_used"`.
+
+**Response — Thất bại**
+```json
+{
+  "success": false,
+  "reason": "invalid_secret"
+}
+```
+hoặc
+```json
+{
+  "success": false,
+  "reason": "already_used"
+}
+```
 
 ---
 
