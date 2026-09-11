@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 backend/node_modules/
 dashboard/node_modules/
@@ -20,6 +20,10 @@ backend/.env
 dashboard/.env
 widget/.env
 *.local
+
+# Nginx Generated SSL configs
+nginx/conf.d/ssl.conf
+nginx/conf.d/*.ssl.conf
 
 # Logs
 logs/

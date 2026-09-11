@@ -116,9 +116,10 @@ services:
       - "${PORT_HTTPS:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d/vina-captcha.conf:/etc/nginx/conf.d/vina-captcha.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./widget/dist:/usr/share/nginx/widget:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       - backend
       - dashboard

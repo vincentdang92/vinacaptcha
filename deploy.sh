@@ -143,13 +143,24 @@ if [ -d "widget" ]; then
 fi
 
 # ==========================================================
-# 4. PULL & BUILD DOCKER CONTAINERS
+# 4. TỰ ĐỘNG KHÔI PHỤC SSL NẾU ĐÃ CÓ CHỨNG CHỈ LET'S ENCRYPT
+# ==========================================================
+if [ ! -f "./nginx/conf.d/ssl.conf" ] && [ -d "/etc/letsencrypt/live" ]; then
+    EXISTING_DOMAIN=$(ls -1 /etc/letsencrypt/live 2>/dev/null | grep -v 'README' | head -n 1 || true)
+    if [ -n "$EXISTING_DOMAIN" ] && [ -f "/etc/letsencrypt/live/$EXISTING_DOMAIN/fullchain.pem" ]; then
+        echo -e "🔒 Phát hiện chứng chỉ SSL đã cấp cho ${CYAN}$EXISTING_DOMAIN${NC}, tự động kích hoạt HTTPS..."
+        ./ssl.sh "$EXISTING_DOMAIN" || true
+    fi
+fi
+
+# ==========================================================
+# 5. PULL & BUILD DOCKER CONTAINERS
 # ==========================================================
 echo -e "🐳 [2/3] Đang build và khởi động hệ thống Docker..."
 docker compose build --parallel
 
 # ==========================================================
-# 5. KHỞI ĐỘNG DỊCH VỤ BACKGROUND
+# 6. KHỞI ĐỘNG DỊCH VỤ BACKGROUND
 # ==========================================================
 echo -e "⚡ [3/3] Khởi động các container..."
 docker compose up -d

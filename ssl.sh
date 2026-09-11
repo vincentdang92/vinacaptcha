@@ -90,26 +90,16 @@ echo -e "  ${GREEN}✓${NC} Cấp chứng chỉ SSL thành công!"
 # 6. TỰ ĐỘNG CẬP NHẬT CẤU HÌNH NGINX SANG HTTPS
 echo -e "⚙️ [4/5] Cập nhật cấu hình Nginx sang giao thức HTTPS (Port 443)..."
 
-cat <<EOF | $SUDO tee ./nginx/conf.d/vina-captcha.conf > /dev/null
+cat <<EOF | $SUDO tee ./nginx/conf.d/ssl.conf > /dev/null
 # ==========================================================
-# NhanHoaCaptcha Nginx Configuration (HTTPS Enabled)
+# NhanHoaCaptcha Nginx HTTPS Configuration
 # Domain: $DOMAIN
 # ==========================================================
 
-upstream backend_cluster {
-    server backend:3000 max_fails=3 fail_timeout=10s;
-    keepalive 64;
-}
-
-upstream dashboard_service {
-    server dashboard:80;
-    keepalive 32;
-}
-
-# 1. Chuyển hướng toàn bộ HTTP (Port 80) sang HTTPS (Port 443)
+# 1. Chuyển hướng HTTP sang HTTPS cho domain $DOMAIN
 server {
     listen 80;
-    server_name $DOMAIN _;
+    server_name $DOMAIN;
 
     # Cho phép Let's Encrypt renew tự động qua HTTP-01
     location /.well-known/acme-challenge/ {
@@ -124,7 +114,7 @@ server {
 # 2. Máy chủ HTTPS chính (Port 443)
 server {
     listen 443 ssl http2;
-    server_name $DOMAIN _;
+    server_name $DOMAIN;
 
     # SSL Certificates
     ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
