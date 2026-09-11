@@ -9,7 +9,7 @@ import {
   useNotificationProvider,
   ErrorComponent,
 } from '@refinedev/antd';
-import { GlobalOutlined, SafetyCertificateOutlined, DashboardOutlined, AlertOutlined, BookOutlined, ControlOutlined } from '@ant-design/icons';
+import { GlobalOutlined, SafetyCertificateOutlined, DashboardOutlined, AlertOutlined, BookOutlined, ControlOutlined, MailOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 import { authProvider } from './authProvider';
@@ -21,6 +21,7 @@ import { ThreatIntelPage } from './pages/threat-intel';
 import { ApiDocsPage } from './pages/api-docs';
 import { IpReputationPage } from './pages/ip-reputation';
 import { RiskEnginePage } from './pages/risk-engine';
+import { SmtpSettingsPage } from './pages/smtp-settings';
 import { ColorModeContextProvider } from './contexts/color-mode';
 import { Header } from './components/header';
 import { AccountList } from './pages/accounts/list';
@@ -116,10 +117,18 @@ function App() {
                   icon: <SafetyCertificateOutlined />,
                 },
               },
+              {
+                name: 'smtp-settings',
+                list: '/settings/smtp',
+                meta: {
+                  label: 'Cổng Email SMTP',
+                  icon: <MailOutlined />,
+                },
+              },
             ]}
             accessControlProvider={{
               can: async ({ resource }) => {
-                const adminOnlyResources = ['ip-reputation', 'risk-engine', 'accounts'];
+                const adminOnlyResources = ['ip-reputation', 'risk-engine', 'accounts', 'smtp-settings'];
                 
                 if (resource && adminOnlyResources.includes(resource)) {
                   const userStr = localStorage.getItem("vinacaptcha_user");
@@ -175,6 +184,7 @@ function App() {
                   <Route path="accounts">
                     <Route index element={<AccountList />} />
                   </Route>
+                  <Route path="settings/smtp" element={<SmtpSettingsPage />} />
                   <Route path="*" element={<ErrorComponent />} />
                 </Route>
               </Routes>

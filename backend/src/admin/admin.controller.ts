@@ -261,5 +261,19 @@ export class AdminController {
   async getPlans() {
     return this.adminService.getPlans();
   }
+
+  // ─── Quản lý & Kiểm tra Cổng Email SMTP ───────────────────────────────────
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Get('smtp/status')
+  async getSmtpStatus() {
+    return this.adminService.getSmtpStatus();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('smtp/test')
+  async testSmtp(@Body() body: { email?: string }) {
+    return this.adminService.testSmtpConnection(body?.email);
+  }
 }
 

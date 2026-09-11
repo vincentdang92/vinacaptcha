@@ -12,6 +12,7 @@ import { ThreatIntelModule } from './threat-intel/threat-intel.module.js';
 import { ReputationModule } from './reputation/reputation.module.js';
 import { RiskEngineModule } from './risk-engine/risk-engine.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
+import { MailModule } from './mail/mail.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { JobsModule } from './jobs/jobs.module.js';
       envFilePath: '.env',
     }),
     ScheduleModule.forRoot(), // Kích hoạt @Cron() decorator cho toàn bộ app
+    MailModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

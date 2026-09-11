@@ -6,8 +6,8 @@ import { ApiKey } from './entities/api-key.entity.js';
 import { Account } from './entities/account.entity.js';
 import { Plan } from './entities/plan.entity.js';
 import { RedisService } from '../redis/redis.service.js';
+import { MailService } from '../mail/mail.service.js';
 import * as crypto from 'crypto';
-import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class AdminService {
@@ -18,6 +18,7 @@ export class AdminService {
     @InjectRepository(Plan) private plansRepo: Repository<Plan>,
     private dataSource: DataSource,
     private redisService: RedisService,
+    private mailService: MailService,
   ) {}
 
   async getDashboardStats(accountId?: string, role?: string) {
@@ -441,42 +442,20 @@ export class AdminService {
     
     await this.accountsRepo.save(acc);
 
-    // Gửi email qua SMTP
-    await this.sendActivationEmail(cleanEmail, name, activationToken);
+    // Gửi email kích hoạt tài khoản qua MailService
+    await this.mailService.sendActivationEmail(cleanEmail, name, activationToken);
 
     return { success: true, message: 'Đăng ký thành công, vui lòng kiểm tra email để kích hoạt.' };
   }
 
-  private async sendActivationEmail(email: string, name: string, token: string) {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return;
-    }
+  // ─── Quản lý Cấu hình SMTP Email ──────────────────────────────────────────
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+  getSmtpStatus() {
+    return this.mailService.getSmtpStatus();
+  }
 
-    const appUrl = process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
-    const activationLink = `${appUrl}/admin/v1/auth/activate?token=${token}`;
-
-    await transporter.sendMail({
-      from: `"NhanHoaCaptcha System" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "NhanHoaCaptcha - Kích hoạt tài khoản",
-      html: `<p>Xin chào ${name},</p>
-             <p>Cảm ơn bạn đã đăng ký tài khoản NhanHoaCaptcha.</p>
-             <p>Vui lòng click vào link sau để kích hoạt tài khoản của bạn:</p>
-             <p><a href="${activationLink}">${activationLink}</a></p>
-             <p>Tài khoản của bạn đã được gán gói Trải Nghiệm (Tối đa 2 domain và 10.000 requests).</p>`
-    }).catch(err => {
-      console.error('Lỗi gửi email:', err);
-    });
+  async testSmtpConnection(targetEmail?: string) {
+    return this.mailService.testConnection(targetEmail);
   }
 
   async activateAccount(token: string) {

@@ -7,6 +7,7 @@ import { ApiKey } from './entities/api-key.entity.js';
 import { Account } from './entities/account.entity.js';
 import { Plan } from './entities/plan.entity.js';
 import { RedisService } from '../redis/redis.service.js';
+import { MailService } from '../mail/mail.service.js';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -32,6 +33,13 @@ describe('AdminService', () => {
     invalidateDashboardStatsCache: () => Promise.resolve(),
   };
 
+  const mockMailService = {
+    getSmtpStatus: () => ({ is_configured: true }),
+    testConnection: () => Promise.resolve({ success: true }),
+    sendActivationEmail: () => Promise.resolve({ success: true }),
+    sendQuotaWarningEmail: () => Promise.resolve({ success: true }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -42,6 +50,7 @@ describe('AdminService', () => {
         { provide: getRepositoryToken(Plan), useValue: mockRepo },
         { provide: DataSource, useValue: mockDataSource },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: MailService, useValue: mockMailService },
       ],
     }).compile();
 
