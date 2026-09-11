@@ -56,7 +56,7 @@ export const AuthLayout = ({ children }: { children: React.ReactNode }) => {
                 <rect x="17" y="4" width="4" height="16" rx="2" fill="white"/>
               </svg>
             </div>
-            <Title level={2} style={{ color: "#ffffff", margin: 0, fontWeight: 700 }}>VinaCaptcha</Title>
+            <Title level={2} style={{ color: "#ffffff", margin: 0, fontWeight: 700 }}>NhanHoaCaptcha</Title>
           </div>
           <Text style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "16px", maxWidth: 400, display: "inline-block" }}>
             Hệ thống quản trị xác thực Captcha & phòng thủ Botnet

@@ -1,5 +1,5 @@
 -- ==========================================================
--- VinaCaptcha Database Initialization Script (PostgreSQL)
+-- NhanHoaCaptcha Database Initialization Script (PostgreSQL)
 -- Tự động chạy khi khởi tạo container postgres trên bất cứ VPS nào
 -- ==========================================================
 

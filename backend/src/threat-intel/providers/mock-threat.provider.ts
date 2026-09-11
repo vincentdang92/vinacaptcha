@@ -17,7 +17,7 @@ export class MockThreatProvider implements ThreatIntelSourceProvider {
     try {
       const response = await fetch(url, {
         signal: AbortSignal.timeout(20000), // File này khoảng 1-2MB, cần timeout dài hơn
-        headers: { 'User-Agent': 'VinaCaptcha-ThreatIntel/1.0' },
+        headers: { 'User-Agent': 'NhanHoaCaptcha-ThreatIntel/1.0' },
       });
 
       if (!response.ok) {

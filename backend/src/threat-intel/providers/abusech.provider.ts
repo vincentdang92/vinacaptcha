@@ -34,7 +34,7 @@ export class AbusechProvider implements ThreatIntelSourceProvider {
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(15000),
-        headers: { 'User-Agent': 'VinaCaptcha-ThreatIntel/1.0' },
+        headers: { 'User-Agent': 'NhanHoaCaptcha-ThreatIntel/1.0' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} từ ${url}`);
 

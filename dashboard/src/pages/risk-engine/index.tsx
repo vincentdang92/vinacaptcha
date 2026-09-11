@@ -70,7 +70,7 @@ export const RiskEnginePage: React.FC = () => {
         <Col span={24}>
           <Card title={<><SafetyCertificateOutlined /> 3. IP Reputation (Uy tín liên-site)</>} variant="borderless">
             <Paragraph>
-              Đây là hệ thống <b>chia sẻ dữ liệu</b> độc quyền của VinaCaptcha. Thay vì chỉ học trên 1 site, hệ thống học từ mọi site đang tích hợp captcha.
+              Đây là hệ thống <b>chia sẻ dữ liệu</b> độc quyền của NhanHoaCaptcha. Thay vì chỉ học trên 1 site, hệ thống học từ mọi site đang tích hợp captcha.
             </Paragraph>
             <ul style={{ paddingLeft: 20 }}>
               <li>Nếu 1 IP giải captcha thất bại (hoặc bị phát hiện là Bot) ở Site A, nó sẽ bị ghi nhận điểm xấu. Khi IP đó sang Site B, điểm xấu này vẫn đi theo.</li>

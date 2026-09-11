@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-# VinaCaptcha Automated SSL / HTTPS Provisioning Script
+# NhanHoaCaptcha Automated SSL / HTTPS Provisioning Script
 # Let's Encrypt + Auto Nginx Config + Auto-Renewal
 # ==========================================================
 set -e
@@ -14,7 +14,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}==========================================================${NC}"
-echo -e "${CYAN}🔒 [VinaCaptcha] Thiết Lập Chứng Chỉ SSL / HTTPS Tự Động${NC}"
+echo -e "${CYAN}🔒 [NhanHoaCaptcha] Thiết Lập Chứng Chỉ SSL / HTTPS Tự Động${NC}"
 echo -e "${BLUE}==========================================================${NC}"
 
 # 1. KIỂM TRA QUYỀN ROOT / SUDO
@@ -92,7 +92,7 @@ echo -e "⚙️ [4/5] Cập nhật cấu hình Nginx sang giao thức HTTPS (Por
 
 cat <<EOF | $SUDO tee ./nginx/conf.d/vina-captcha.conf > /dev/null
 # ==========================================================
-# VinaCaptcha Nginx Configuration (HTTPS Enabled)
+# NhanHoaCaptcha Nginx Configuration (HTTPS Enabled)
 # Domain: $DOMAIN
 # ==========================================================
 

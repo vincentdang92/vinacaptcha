@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-# VinaCaptcha Full Auto 1-Command Installer for Fresh VPS
+# NhanHoaCaptcha Full Auto 1-Command Installer for Fresh VPS
 # Supported: Ubuntu 20.04 / 22.04 / 24.04 LTS, Debian 11/12
 # ==========================================================
 set -e
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 
 clear 2>/dev/null || true
 echo -e "${BLUE}==========================================================${NC}"
-echo -e "${CYAN}   🇻🇳 VinaCaptcha — Hệ Thống Captcha Nội Bộ Hiệu Năng Cao  ${NC}"
+echo -e "${CYAN}   🇻🇳 NhanHoaCaptcha — Hệ Thống Captcha Nội Bộ Hiệu Năng Cao  ${NC}"
 echo -e "${BLUE}==========================================================${NC}"
 echo -e "${GREEN}🚀 Bắt đầu quy trình cài đặt trọn gói từ A-Z...${NC}\n"
 
@@ -59,7 +59,7 @@ $SUDO ufw allow 443/tcp > /dev/null 2>&1 || true
 echo -e "  ${GREEN}✓${NC} Các cổng 22 (SSH), 80 (HTTP), 443 (HTTPS) đã sẵn sàng."
 
 # 5. TẢI HOẶC CẬP NHẬT MÃ NGUỒN VINACAPTCHA
-echo -e "📥 [4/5] Chuẩn bị mã nguồn VinaCaptcha..."
+echo -e "📥 [4/5] Chuẩn bị mã nguồn NhanHoaCaptcha..."
 TARGET_DIR="/opt/vinacaptcha"
 REPO_URL="https://github.com/vincentdang92/vinacaptcha.git"
 

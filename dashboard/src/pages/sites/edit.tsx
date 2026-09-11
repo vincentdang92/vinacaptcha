@@ -326,13 +326,13 @@ export const SiteEdit = ({
                 Nhúng đoạn mã sau vào form submit của website:
               </Text>
               <pre style={{ margin: 0, color: "#f8fafc", fontFamily: "monospace", fontSize: "12px", overflowX: "auto" }}>
-{`<!-- 1. VinaCaptcha Container đặt bên trong <form> -->
+{`<!-- 1. NhanHoaCaptcha Container đặt bên trong <form> -->
 <div id="vina-captcha-container"></div>
 
 <!-- 2. Nhúng Script Widget (< 15KB gzip) -->
 <script src="${window.location.origin}/widget/vina-captcha.js"></script>
 <script>
-  new VinaCaptcha("vina-captcha-container", "${siteId}");
+  new NhanHoaCaptcha("vina-captcha-container", "${siteId}");
 </script>`}
               </pre>
             </div>

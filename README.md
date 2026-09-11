@@ -1,4 +1,4 @@
-# 🛡️ VinaCaptcha — Hệ Thống Xác Thực Chống Bot & Captcha Nội Bộ
+# 🛡️ NhanHoaCaptcha — Hệ Thống Xác Thực Chống Bot & Captcha Nội Bộ
 
 [![Build & Tests](https://img.shields.io/badge/tests-30%2F30%20passing-brightgreen)](#)
 [![Widget Bundle Size](https://img.shields.io/badge/widget%20size-%3C%206.5KB%20gzip-blue)](#)
@@ -6,7 +6,7 @@
 [![Refine Dashboard](https://img.shields.io/badge/dashboard-Refine%20%2B%20React%2019-purple)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](#)
 
-**VinaCaptcha** là giải pháp xác thực bảo mật và phòng chống bot tự động thế hệ mới, được thiết kế để tự host hoàn toàn (Self-Hosted), thay thế hoàn hảo cho Google reCAPTCHA, Cloudflare Turnstile, hoặc hCaptcha trong các trường hợp bị chặn quốc tế, ISP throttle hoặc có yêu cầu chủ quyền dữ liệu nội bộ.
+**NhanHoaCaptcha** là giải pháp xác thực bảo mật và phòng chống bot tự động thế hệ mới, được thiết kế để tự host hoàn toàn (Self-Hosted), thay thế hoàn hảo cho Google reCAPTCHA, Cloudflare Turnstile, hoặc hCaptcha trong các trường hợp bị chặn quốc tế, ISP throttle hoặc có yêu cầu chủ quyền dữ liệu nội bộ.
 
 ---
 
@@ -45,14 +45,14 @@ Hệ thống tuân thủ chuẩn bảo mật phân tách 2 khóa:
 Nhúng đoạn mã sau vào form HTML của website:
 
 ```html
-<!-- 1. VinaCaptcha Container bên trong <form> -->
+<!-- 1. NhanHoaCaptcha Container bên trong <form> -->
 <div id="vina-captcha-container"></div>
 
 <!-- 2. Nhúng Script Widget (< 6.5KB gzip) -->
 <script src="https://your-captcha-domain.com/widget/vina-captcha.js" defer></script>
 <script>
   document.addEventListener("DOMContentLoaded", function() {
-    new VinaCaptcha("vina-captcha-container", {
+    new NhanHoaCaptcha("vina-captcha-container", {
       siteKey: "YOUR_PUBLIC_SITE_KEY_UUID", // Site Key UUID lấy từ Dashboard
       onSuccess: function(token, score) {
         console.log("Xác thực hoàn tất! Token:", token);
@@ -67,7 +67,7 @@ Nhúng đoạn mã sau vào form HTML của website:
 
 ### **Bước 2: Phía Server Backend (Dùng Secret Key `cap_live_...`)**
 
-Khi form gửi về Server của bạn, Backend lấy `vina_captcha_token` và gửi request đối soát sang VinaCaptcha Server:
+Khi form gửi về Server của bạn, Backend lấy `vina_captcha_token` và gửi request đối soát sang NhanHoaCaptcha Server:
 
 #### 🟢 **Node.js / Express**:
 ```javascript
@@ -162,4 +162,4 @@ Hệ thống bao gồm 3 phân hệ độc lập:
 
 ## 📄 Bản Quyền & Giấy Phép
 
-Phát triển bởi đội ngũ kỹ thuật VinaCaptcha. Giấy phép mã nguồn mở MIT License.
+Phát triển bởi đội ngũ kỹ thuật NhanHoaCaptcha. Giấy phép mã nguồn mở MIT License.

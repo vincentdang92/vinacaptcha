@@ -15,7 +15,7 @@ export class GoogleCloudProvider implements ThreatIntelSourceProvider {
     try {
       const res = await fetch('https://www.gstatic.com/ipranges/cloud.json', {
         signal: AbortSignal.timeout(10000),
-        headers: { 'User-Agent': 'VinaCaptcha-ThreatIntel/1.0' },
+        headers: { 'User-Agent': 'NhanHoaCaptcha-ThreatIntel/1.0' },
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

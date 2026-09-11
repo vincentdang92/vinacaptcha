@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-# VinaCaptcha 1-Click Deployment & Rapid Fallback Script
+# NhanHoaCaptcha 1-Click Deployment & Rapid Fallback Script
 # ==========================================================
 set -e
 
@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}==========================================================${NC}"
-echo -e "${BLUE}🚀 [VinaCaptcha] Bắt đầu quy trình kiểm tra & triển khai...${NC}"
+echo -e "${BLUE}🚀 [NhanHoaCaptcha] Bắt đầu quy trình kiểm tra & triển khai...${NC}"
 echo -e "${BLUE}==========================================================${NC}"
 
 # ==========================================================
@@ -147,7 +147,7 @@ docker compose up -d
 
 echo ""
 echo -e "${GREEN}==========================================================${NC}"
-echo -e "${GREEN}🎉 [VinaCaptcha] Triển khai thành công!${NC}"
+echo -e "${GREEN}🎉 [NhanHoaCaptcha] Triển khai thành công!${NC}"
 echo -e "${GREEN}==========================================================${NC}"
 echo -e "🌐 Dashboard / Setup  : ${BLUE}http://localhost${NC} (hoặc http://IP_VPS của bạn)"
 echo -e "📡 Widget Script       : ${BLUE}http://localhost/widget/vina-captcha.js${NC}"

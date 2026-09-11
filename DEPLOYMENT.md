@@ -1,6 +1,6 @@
 # Cẩm Nang Triển Khai & Khắc Phục Sự Cố (Deployment & Fallback Runbook)
 
-Tài liệu này hướng dẫn cách triển khai hệ thống **VinaCaptcha** trọn gói lên bất kỳ máy chủ VPS nào chỉ với Docker trong vòng 1 phút, đồng thời hướng dẫn quy trình **Dự phòng / Fallback khẩn cấp** khi máy chủ chính gặp sự cố.
+Tài liệu này hướng dẫn cách triển khai hệ thống **NhanHoaCaptcha** trọn gói lên bất kỳ máy chủ VPS nào chỉ với Docker trong vòng 1 phút, đồng thời hướng dẫn quy trình **Dự phòng / Fallback khẩn cấp** khi máy chủ chính gặp sự cố.
 
 ---
 

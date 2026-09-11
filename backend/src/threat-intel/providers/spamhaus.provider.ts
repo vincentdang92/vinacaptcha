@@ -40,7 +40,7 @@ export class SpamhausProvider implements ThreatIntelSourceProvider {
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(10000),
-        headers: { 'User-Agent': 'VinaCaptcha-ThreatIntel/1.0' },
+        headers: { 'User-Agent': 'NhanHoaCaptcha-ThreatIntel/1.0' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

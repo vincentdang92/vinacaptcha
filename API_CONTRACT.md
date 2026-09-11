@@ -115,7 +115,7 @@ Gọi sau khi user hoàn thành challenge (hoặc ngay lập tức nếu `challe
 
 ### 1.3 `POST /v1/siteverify` (Server-to-Server)
 
-Máy chủ backend của khách hàng gọi sang VinaCaptcha để đối soát tính hợp lệ của token.
+Máy chủ backend của khách hàng gọi sang NhanHoaCaptcha để đối soát tính hợp lệ của token.
 
 **Request body**
 ```json

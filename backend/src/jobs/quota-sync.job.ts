@@ -173,8 +173,8 @@ export class QuotaSyncJob {
 
       const subject =
         threshold >= 100
-          ? `[VinaCaptcha] CẢNH BÁO: Bạn đã sử dụng hết 100% hạn mức Captcha tháng này!`
-          : `[VinaCaptcha] Cảnh báo: Bạn đã sử dụng 80% hạn mức Captcha tháng này`;
+          ? `[NhanHoaCaptcha] CẢNH BÁO: Bạn đã sử dụng hết 100% hạn mức Captcha tháng này!`
+          : `[NhanHoaCaptcha] Cảnh báo: Bạn đã sử dụng 80% hạn mức Captcha tháng này`;
 
       const alertColor = threshold >= 100 ? '#ea5455' : '#ff9f43';
 
@@ -182,7 +182,7 @@ export class QuotaSyncJob {
         <div style="font-family: sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 24px;">
           <h2 style="color: ${alertColor}; margin-top: 0;">Thông Báo Dung Lượng Captcha</h2>
           <p>Xin chào <strong>${name}</strong>,</p>
-          <p>Hệ thống VinaCaptcha xin thông báo tài khoản của bạn đã đạt mốc <strong>${threshold}%</strong> hạn mức sử dụng trong tháng:</p>
+          <p>Hệ thống NhanHoaCaptcha xin thông báo tài khoản của bạn đã đạt mốc <strong>${threshold}%</strong> hạn mức sử dụng trong tháng:</p>
           
           <div style="background-color: #f8f9fa; border-left: 4px solid ${alertColor}; padding: 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0;"><strong>Gói cước:</strong> ${planName}</p>
@@ -196,12 +196,12 @@ export class QuotaSyncJob {
               : `<p>Để đảm bảo hoạt động xác thực của website không bị gián đoạn, bạn có thể cân nhắc liên hệ Quản trị viên để nâng cấp gói cước cao hơn.</p>`
           }
 
-          <p style="margin-top: 24px; color: #666; font-size: 13px;">Trân trọng,<br/>Đội ngũ Kỹ thuật VinaCaptcha</p>
+          <p style="margin-top: 24px; color: #666; font-size: 13px;">Trân trọng,<br/>Đội ngũ Kỹ thuật NhanHoaCaptcha</p>
         </div>
       `;
 
       await transporter.sendMail({
-        from: `"VinaCaptcha Alert" <${process.env.SMTP_USER}>`,
+        from: `"NhanHoaCaptcha Alert" <${process.env.SMTP_USER}>`,
         to: email,
         subject,
         html,

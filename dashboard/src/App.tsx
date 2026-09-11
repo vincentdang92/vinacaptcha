@@ -154,7 +154,7 @@ function App() {
                         Title={(props) => (
                           <ThemedTitle
                             {...props}
-                            text="VinaCaptcha"
+                            text="NhanHoaCaptcha"
                             icon={<SafetyCertificateOutlined style={{ color: '#7367f0', fontSize: '24px' }} />}
                           />
                         )}

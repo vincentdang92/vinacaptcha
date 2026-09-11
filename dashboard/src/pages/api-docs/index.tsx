@@ -17,12 +17,12 @@ const BASE_URL = typeof window !== "undefined" && window.location ? window.locat
 
 const SKILL_MD_TEXT = `---
 name: vina-captcha-integration
-description: Hướng dẫn tích hợp hệ thống xác thực chống bot VinaCaptcha vào đa nền tảng (Web, Laravel, WordPress, NodeJS, Python, Mobile App).
+description: Hướng dẫn tích hợp hệ thống xác thực chống bot NhanHoaCaptcha vào đa nền tảng (Web, Laravel, WordPress, NodeJS, Python, Mobile App).
 ---
 
-# VinaCaptcha Integration Skill for AI Coding Agents
+# NhanHoaCaptcha Integration Skill for AI Coding Agents
 
-Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã mẫu chuẩn để AI Coding Agent (Cursor, Claude Code, Copilot, Antigravity,...) tự động tích hợp VinaCaptcha vào bất kỳ codebase nào.
+Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã mẫu chuẩn để AI Coding Agent (Cursor, Claude Code, Copilot, Antigravity,...) tự động tích hợp NhanHoaCaptcha vào bất kỳ codebase nào.
 
 ---
 
@@ -30,7 +30,7 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 | Loại Khóa | Nơi Lưu Trữ | Giá Trị Ví Dụ | Mục Đích |
 | :--- | :--- | :--- | :--- |
-| 🟢 **Public Site Key** | Frontend HTML / JS / Mobile App | UUID: \`0119c349-a104-4dd2-b4c5-...\` | Khởi tạo Widget & lấy challenge từ VinaCaptcha. Được bảo vệ bởi Domain Whitelist. |
+| 🟢 **Public Site Key** | Frontend HTML / JS / Mobile App | UUID: \`0119c349-a104-4dd2-b4c5-...\` | Khởi tạo Widget & lấy challenge từ NhanHoaCaptcha. Được bảo vệ bởi Domain Whitelist. |
 | 🔴 **Private Secret Key** | Server Backend (.env) | \`cap_live_90ee9772f1e3...\` | Server backend dùng để gọi \`/v1/siteverify\` xác minh token. **Tuyệt đối không để lộ ở client.** |
 
 ---
@@ -39,7 +39,7 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 1. **Frontend (Client)**:
    - Nhúng Widget JS \`vina-captcha.js\` vào form.
-   - Khởi tạo Widget bằng **Public Site Key (UUID)**: \`new VinaCaptcha("container-id", "YOUR_SITE_KEY_UUID")\`.
+   - Khởi tạo Widget bằng **Public Site Key (UUID)**: \`new NhanHoaCaptcha("container-id", "YOUR_SITE_KEY_UUID")\`.
    - Khi user submit form, Widget tự động tạo \`verify_token\` ngắn hạn (60s) gắn vào field ẩn \`vina_captcha_token\` trong form.
 2. **Backend (Server)**:
    - Server nhận \`vina_captcha_token\` từ request submit của client.
@@ -53,7 +53,7 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 ### 🚀 1. PHP / Laravel Framework
 
-#### Validation Rule (\`app/Rules/VinaCaptcha.php\`):
+#### Validation Rule (\`app/Rules/NhanHoaCaptcha.php\`):
 \`\`\`php
 <?php
 namespace App\\Rules;
@@ -62,7 +62,7 @@ use Closure;
 use Illuminate\\Contracts\\Validation\\ValidationRule;
 use Illuminate\\Support\\Facades\\Http;
 
-class VinaCaptcha implements ValidationRule
+class NhanHoaCaptcha implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
@@ -72,7 +72,7 @@ class VinaCaptcha implements ValidationRule
         ]);
 
         if (!$response->successful() || !($response->json('success') ?? false)) {
-            $fail('Xác thực bảo mật VinaCaptcha không hợp lệ hoặc đã hết hạn.');
+            $fail('Xác thực bảo mật NhanHoaCaptcha không hợp lệ hoặc đã hết hạn.');
         }
     }
 }
@@ -85,7 +85,7 @@ public function login(Request $request)
     $request->validate([
         'email' => 'required|email',
         'password' => 'required',
-        'vina_captcha_token' => ['required', new \\App\\Rules\\VinaCaptcha],
+        'vina_captcha_token' => ['required', new \\App\\Rules\\NhanHoaCaptcha],
     ]);
 
     // Tiến hành xác thực đăng nhập...
@@ -109,7 +109,7 @@ add_action('login_form', function() {
     echo '<div id="vina-captcha-box" style="margin-bottom: 16px;"></div>';
     echo '<script>
         document.addEventListener("DOMContentLoaded", function() {
-            new VinaCaptcha("vina-captcha-box", "YOUR_PUBLIC_SITE_KEY_UUID");
+            new NhanHoaCaptcha("vina-captcha-box", "YOUR_PUBLIC_SITE_KEY_UUID");
         });
     </script>';
 });
@@ -154,10 +154,10 @@ add_filter('authenticate', function($user, $username, $password) {
 import axios from 'axios';
 import { Request, Response, NextFunction } from 'express';
 
-export async function verifyVinaCaptcha(req: Request, res: Response, next: NextFunction) {
+export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: NextFunction) {
   const token = req.body.vina_captcha_token || req.headers['x-vina-token'];
   if (!token) {
-    return res.status(400).json({ error: 'Missing VinaCaptcha token (vina_captcha_token)' });
+    return res.status(400).json({ error: 'Missing NhanHoaCaptcha token (vina_captcha_token)' });
   }
 
   try {
@@ -352,7 +352,7 @@ export const ApiDocsPage = () => {
           <CodeBlock lang="js" code={`<script>
   document.addEventListener('DOMContentLoaded', () => {
     // Khởi tạo Widget bằng Public Site Key (UUID) lấy từ mục Quản lý Sites
-    const captcha = new VinaCaptcha('vina-captcha-container', {
+    const captcha = new NhanHoaCaptcha('vina-captcha-container', {
       siteKey: 'YOUR_SITE_KEY_UUID',  // Thay bằng Site Key UUID thật của bạn
       baseUrl: '${BASE_URL}',
       onSuccess: (token, score) => {
@@ -415,7 +415,7 @@ app.post('/login', async (req, res) => {
                 label: "PHP",
                 children: (
                   <CodeBlock lang="php" code={`<?php
-function verifyVinaCaptcha(string $vinaToken, string $siteSecret): array {
+function verifyNhanHoaCaptcha(string $vinaToken, string $siteSecret): array {
     $payload = json_encode([
         'secret'       => $siteSecret,  // cap_live_...
         'verify_token' => $vinaToken,
@@ -436,7 +436,7 @@ function verifyVinaCaptcha(string $vinaToken, string $siteSecret): array {
 }
 
 // Trong form handler:
-$verify = verifyVinaCaptcha($_POST['vina_captcha_token'] ?? '', $_ENV['VINACAPTCHA_SECRET_KEY']);
+$verify = verifyNhanHoaCaptcha($_POST['vina_captcha_token'] ?? '', $_ENV['VINACAPTCHA_SECRET_KEY']);
 if (empty($verify['success'])) {
     http_response_code(400);
     echo json_encode(['error' => 'Captcha không hợp lệ hoặc đã hết hạn']);
@@ -478,10 +478,10 @@ def login():
           {/* Bước 5 */}
           <Title level={5} style={{ color: "#7367f0", marginTop: 24 }}>Bước 5 — Xử lý Reset Captcha (Cho SPA / AJAX Form)</Title>
           <Paragraph type="secondary">
-            Token của VinaCaptcha là dạng <strong>one-time-use (sử dụng một lần)</strong>. Nếu form của bạn gửi bằng AJAX (không reload trang) và bị lỗi (vd: sai mật khẩu), bạn bắt buộc phải gọi hàm <Text code>reset()</Text> để Captcha đánh giá lại rủi ro và sinh token mới.
+            Token của NhanHoaCaptcha là dạng <strong>one-time-use (sử dụng một lần)</strong>. Nếu form của bạn gửi bằng AJAX (không reload trang) và bị lỗi (vd: sai mật khẩu), bạn bắt buộc phải gọi hàm <Text code>reset()</Text> để Captcha đánh giá lại rủi ro và sinh token mới.
           </Paragraph>
           <CodeBlock lang="js" code={`// Lấy instance captcha đã khởi tạo từ trước
-const captcha = new VinaCaptcha('vina-captcha-container', 'YOUR_SITE_KEY_UUID');
+const captcha = new NhanHoaCaptcha('vina-captcha-container', 'YOUR_SITE_KEY_UUID');
 
 async function handleAjaxSubmit() {
   const token = document.getElementById('vina_captcha_token').value;
@@ -697,11 +697,11 @@ Content-Type: application/json
         <div>
           <Title level={4}>Widget JavaScript API</Title>
           <Paragraph type="secondary">
-            Sau khi load script, class <Text code>VinaCaptcha</Text> có sẵn ở global scope.
+            Sau khi load script, class <Text code>NhanHoaCaptcha</Text> có sẵn ở global scope.
           </Paragraph>
 
           <Title level={5}>Constructor</Title>
-          <CodeBlock lang="js" code={`const captcha = new VinaCaptcha(containerId, config);
+          <CodeBlock lang="js" code={`const captcha = new NhanHoaCaptcha(containerId, config);
 
 // containerId: string — ID của element chứa widget
 // config: object — cấu hình widget`} />
@@ -736,7 +736,7 @@ Content-Type: application/json
 
           <Title level={5}>Methods</Title>
           <Paragraph type="secondary">
-            Các phương thức công khai (public methods) của instance VinaCaptcha.
+            Các phương thức công khai (public methods) của instance NhanHoaCaptcha.
           </Paragraph>
           
           <CodeBlock lang="js" code={`// captcha.reset()
@@ -760,7 +760,7 @@ captcha.reset();`} />
   <script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const captcha = new VinaCaptcha('vina-captcha-container', {
+      const captcha = new NhanHoaCaptcha('vina-captcha-container', {
         siteKey: 'YOUR_SITE_KEY_UUID',
         onSuccess: (token, score) => {
           document.getElementById('vina_captcha_token').value = token;
@@ -788,12 +788,12 @@ captcha.reset();`} />
         <div>
           <Title level={4}>Tích hợp cho Ứng dụng Di động (Mobile App)</Title>
           <Paragraph type="secondary">
-            VinaCaptcha được thiết kế tối ưu cho nền tảng Web thông qua giao thức phân tích DOM và trình duyệt (Widget JS). Tuy nhiên, bạn vẫn có thể tích hợp dễ dàng trên các nền tảng di động (iOS, Android, React Native, Flutter) theo 2 cách dưới đây.
+            NhanHoaCaptcha được thiết kế tối ưu cho nền tảng Web thông qua giao thức phân tích DOM và trình duyệt (Widget JS). Tuy nhiên, bạn vẫn có thể tích hợp dễ dàng trên các nền tảng di động (iOS, Android, React Native, Flutter) theo 2 cách dưới đây.
           </Paragraph>
 
           <Title level={5} style={{ color: "#7367f0", marginTop: 24 }}>Cách 1: Sử dụng WebView (Khuyến nghị)</Title>
           <Paragraph>
-            Cách tốt nhất để sử dụng toàn bộ sức mạnh đánh giá rủi ro (Risk Engine) của VinaCaptcha là nhúng một WebView ẩn vào màn hình đăng nhập / đăng ký trên App.
+            Cách tốt nhất để sử dụng toàn bộ sức mạnh đánh giá rủi ro (Risk Engine) của NhanHoaCaptcha là nhúng một WebView ẩn vào màn hình đăng nhập / đăng ký trên App.
           </Paragraph>
           <ul style={{ paddingLeft: 20 }}>
             <li>Tạo một trang HTML trống chứa mã nhúng Widget JS (tương tự Web) và host nó trên server của bạn (VD: <Text code>https://app.yourdomain.com/captcha.html</Text>).</li>
@@ -847,7 +847,7 @@ captcha.reset();`} />
                 🤖 AI Coding Agent Integration Skill
               </Title>
               <Paragraph type="secondary" style={{ margin: 0, marginTop: 4 }}>
-                Tải về hoặc sao chép file <Text code>SKILL.md</Text> này để cung cấp cho các AI Coding Agent (Cursor, Claude Code, GitHub Copilot, Antigravity, ChatGPT) tự động tích hợp VinaCaptcha vào dự án của bạn (Laravel, WordPress, Node.js, Python, Mobile App).
+                Tải về hoặc sao chép file <Text code>SKILL.md</Text> này để cung cấp cho các AI Coding Agent (Cursor, Claude Code, GitHub Copilot, Antigravity, ChatGPT) tự động tích hợp NhanHoaCaptcha vào dự án của bạn (Laravel, WordPress, Node.js, Python, Mobile App).
               </Paragraph>
             </div>
             <Space>
@@ -889,7 +889,7 @@ captcha.reset();`} />
                   1. <strong>Cursor / Claude Code / Antigravity</strong>: Đặt file <Text code>vina-captcha-skill.md</Text> vào thư mục <Text code>.cursor/rules/</Text>, <Text code>.skills/</Text> hoặc gõ lệnh <Text code>@vina-captcha-skill.md Hãy tích hợp captcha vào trang đăng nhập</Text>.
                 </p>
                 <p style={{ margin: "4px 0" }}>
-                  2. <strong>ChatGPT / Copilot</strong>: Dán toàn bộ nội dung file này vào khung chat kèm yêu cầu: <em>"Hãy đọc hướng dẫn VinaCaptcha trên và viết code tích hợp cho ứng dụng Laravel/WordPress/React của tôi"</em>.
+                  2. <strong>ChatGPT / Copilot</strong>: Dán toàn bộ nội dung file này vào khung chat kèm yêu cầu: <em>"Hãy đọc hướng dẫn NhanHoaCaptcha trên và viết code tích hợp cho ứng dụng Laravel/WordPress/React của tôi"</em>.
                 </p>
               </div>
             }
@@ -911,7 +911,7 @@ captcha.reset();`} />
           <ApiOutlined style={{ marginRight: 8, color: "#7367f0" }} />
           API Documentation
         </Title>
-        <Text type="secondary">Hướng dẫn tích hợp VinaCaptcha vào website của bạn</Text>
+        <Text type="secondary">Hướng dẫn tích hợp NhanHoaCaptcha vào website của bạn</Text>
       </div>
 
       <Card variant="borderless">

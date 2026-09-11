@@ -256,7 +256,7 @@ export class AdminService {
 
     return {
       success: true,
-      message: 'Khởi tạo hệ thống VinaCaptcha thành công!',
+      message: 'Khởi tạo hệ thống NhanHoaCaptcha thành công!',
       access_token: accessToken,
       refresh_token: refreshToken,
       account: {
@@ -336,11 +336,11 @@ export class AdminService {
     const activationLink = `${appUrl}/admin/v1/auth/activate?token=${token}`;
 
     await transporter.sendMail({
-      from: `"VinaCaptcha System" <${process.env.SMTP_USER}>`,
+      from: `"NhanHoaCaptcha System" <${process.env.SMTP_USER}>`,
       to: email,
-      subject: "VinaCaptcha - Kích hoạt tài khoản",
+      subject: "NhanHoaCaptcha - Kích hoạt tài khoản",
       html: `<p>Xin chào ${name},</p>
-             <p>Cảm ơn bạn đã đăng ký tài khoản VinaCaptcha.</p>
+             <p>Cảm ơn bạn đã đăng ký tài khoản NhanHoaCaptcha.</p>
              <p>Vui lòng click vào link sau để kích hoạt tài khoản của bạn:</p>
              <p><a href="${activationLink}">${activationLink}</a></p>
              <p>Tài khoản của bạn đã được gán gói Trải Nghiệm (Tối đa 2 domain và 10.000 requests).</p>`

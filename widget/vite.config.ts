@@ -4,7 +4,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: 'src/main.ts',
-      name: 'VinaCaptcha',
+      name: 'NhanHoaCaptcha',
       fileName: () => 'vina-captcha.js',
       formats: ['iife'],
     },

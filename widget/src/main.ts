@@ -1,7 +1,7 @@
-// VinaCaptcha Widget Core — Complete Multi-Challenge Engine (v3 Invisible / PoW / Slider)
+// NhanHoaCaptcha Widget Core — Complete Multi-Challenge Engine (v3 Invisible / PoW / Slider)
 // Bundle target: < 15KB gzip
 
-interface VinaCaptchaConfig {
+interface NhanHoaCaptchaConfig {
   siteKey: string;
   baseUrl?: string;
   onSuccess?: (token: string, score: number) => void;
@@ -46,9 +46,9 @@ function getDefaultBaseUrl(): string {
   return typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:3068';
 }
 
-class VinaCaptcha {
+class NhanHoaCaptcha {
   private container: HTMLElement;
-  private config: VinaCaptchaConfig;
+  private config: NhanHoaCaptchaConfig;
   private form: HTMLFormElement | null = null;
   private loadTime: number;
   private isSubmitting: boolean = false;
@@ -60,9 +60,9 @@ class VinaCaptcha {
   private mouseClicks: number = 0;
   private keyStrokes: number = 0;
 
-  constructor(containerId: string, config: VinaCaptchaConfig | string) {
+  constructor(containerId: string, config: NhanHoaCaptchaConfig | string) {
     const el = document.getElementById(containerId);
-    if (!el) throw new Error(`[VinaCaptcha] Container '${containerId}' not found`);
+    if (!el) throw new Error(`[NhanHoaCaptcha] Container '${containerId}' not found`);
     this.container = el;
 
     const defaultBase = getDefaultBaseUrl();
@@ -81,7 +81,7 @@ class VinaCaptcha {
     this.init();
 
     if (this.config.debug) {
-      console.log(`[VinaCaptcha] Khởi tạo tại #${containerId}. Hỗ trợ: Invisible, PoW, Slider.`);
+      console.log(`[NhanHoaCaptcha] Khởi tạo tại #${containerId}. Hỗ trợ: Invisible, PoW, Slider.`);
     }
   }
 
@@ -118,7 +118,7 @@ class VinaCaptcha {
       }
       this.form.addEventListener('submit', (e) => this.handleSubmit(e, honeypot, tokenInput as HTMLInputElement));
     } else {
-      console.warn('[VinaCaptcha] Không tìm thấy form cha. Chạy ở chế độ manual.');
+      console.warn('[NhanHoaCaptcha] Không tìm thấy form cha. Chạy ở chế độ manual.');
     }
   }
 
@@ -154,7 +154,7 @@ class VinaCaptcha {
     icon.style.fontSize = '13px';
 
     const text = document.createElement('span');
-    text.textContent = 'Protected by VinaCaptcha';
+    text.textContent = 'Protected by NhanHoaCaptcha';
     this.badgeText = text;
 
     badge.appendChild(icon);
@@ -172,7 +172,7 @@ class VinaCaptcha {
     if (!this.badge || !this.badgeText) return;
 
     const styles: Record<BadgeState, { color: string; opacity: string; text: string }> = {
-      idle:    { color: '#555',    opacity: '1',   text: 'Protected by VinaCaptcha' },
+      idle:    { color: '#555',    opacity: '1',   text: 'Protected by NhanHoaCaptcha' },
       loading: { color: '#7367f0', opacity: '1',   text: 'Đang xác thực...' },
       success: { color: '#28c76f', opacity: '1',   text: '✓ Đã xác thực' },
       error:   { color: '#ea5455', opacity: '1',   text: '⚠ Không thể kết nối' },
@@ -219,9 +219,9 @@ class VinaCaptcha {
       ctx.fillStyle = '#f60';
       ctx.fillRect(125, 1, 62, 20);
       ctx.fillStyle = '#069';
-      ctx.fillText('VinaCaptcha,fingerprint', 2, 15);
+      ctx.fillText('NhanHoaCaptcha,fingerprint', 2, 15);
       ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-      ctx.fillText('VinaCaptcha,fingerprint', 4, 17);
+      ctx.fillText('NhanHoaCaptcha,fingerprint', 4, 17);
       const data = canvas.toDataURL();
       let hash = 5381;
       for (let i = 0; i < data.length; i++) {
@@ -459,7 +459,7 @@ class VinaCaptcha {
       // Footer branding
       const footer = document.createElement('div');
       footer.style.cssText = 'font-size: 10px; color: #94a3b8; text-align: center; margin-top: -4px;';
-      footer.textContent = '🔒 Bảo vệ bởi VinaCaptcha';
+      footer.textContent = '🔒 Bảo vệ bởi NhanHoaCaptcha';
       card.appendChild(footer);
 
       overlay.appendChild(card);
@@ -556,7 +556,7 @@ class VinaCaptcha {
     };
 
     if (this.config.debug) {
-      console.log('[VinaCaptcha] Bắt đầu đánh giá risk score...', clientSignals);
+      console.log('[NhanHoaCaptcha] Bắt đầu đánh giá risk score...', clientSignals);
     }
 
     // Fetch IP public của browser (fallback khi dev local không có proxy)
@@ -590,7 +590,7 @@ class VinaCaptcha {
       const issueData = await issueRes.json();
 
       if (this.config.debug) {
-        console.log(`[VinaCaptcha] Risk score: ${issueData.risk_score ?? 'N/A'}, challenge: ${issueData.challenge_type}`);
+        console.log(`[NhanHoaCaptcha] Risk score: ${issueData.risk_score ?? 'N/A'}, challenge: ${issueData.challenge_type}`);
       }
 
       // ② Chuẩn bị payload phản hồi theo loại thử thách
@@ -632,7 +632,7 @@ class VinaCaptcha {
         this.setBadgeState('success');
 
         if (this.config.debug) {
-          console.log(`[VinaCaptcha] ✓ Pass! Token: ${verifyData.verify_token}`);
+          console.log(`[NhanHoaCaptcha] ✓ Pass! Token: ${verifyData.verify_token}`);
         }
 
         if (this.config.onSuccess) {
@@ -642,7 +642,7 @@ class VinaCaptcha {
         this.form?.submit();
       } else {
         if (this.config.debug) {
-          console.warn(`[VinaCaptcha] Verify failed: ${verifyData.result} (${verifyData.reason})`);
+          console.warn(`[NhanHoaCaptcha] Verify failed: ${verifyData.result} (${verifyData.reason})`);
         }
         this.setBadgeState('error', 'Xác thực thất bại');
         this.isSubmitting = false;
@@ -651,7 +651,7 @@ class VinaCaptcha {
         setTimeout(() => this.setBadgeState('idle'), 2000);
       }
     } catch (err) {
-      console.error('[VinaCaptcha] Lỗi xác thực:', err);
+      console.error('[NhanHoaCaptcha] Lỗi xác thực:', err);
       this.setBadgeState('error');
 
       if (this.config.onError) this.config.onError(err as Error);
@@ -796,9 +796,10 @@ class VinaCaptcha {
   }
 }
 
-// Gán trực tiếp vào global window
+// Gán trực tiếp vào global window (hỗ trợ cả NhanHoaCaptcha và alias VinaCaptcha)
 if (typeof window !== 'undefined') {
-  (window as any).VinaCaptcha = VinaCaptcha;
+  (window as any).NhanHoaCaptcha = NhanHoaCaptcha;
+  (window as any).VinaCaptcha = NhanHoaCaptcha;
 }
-export default VinaCaptcha;
+export default NhanHoaCaptcha;
 

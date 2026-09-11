@@ -60,7 +60,7 @@ export const SetupWizardPage = () => {
 
           setSetupResult(response.data);
           setCurrentStep(2);
-          message.success("Khởi tạo hệ thống VinaCaptcha thành công!");
+          message.success("Khởi tạo hệ thống NhanHoaCaptcha thành công!");
         }
       }
     } catch (err: any) {
@@ -90,7 +90,7 @@ export const SetupWizardPage = () => {
           <Result
             status="info"
             title="Hệ Thống Đã Được Cài Đặt"
-            subTitle="VinaCaptcha đã được khởi tạo và cấu hình tài khoản quản trị trước đó."
+            subTitle="NhanHoaCaptcha đã được khởi tạo và cấu hình tài khoản quản trị trước đó."
             extra={[
               <Button type="primary" key="login" size="large" onClick={() => navigate("/login")}>
                 Đến Trang Đăng Nhập
@@ -118,7 +118,7 @@ export const SetupWizardPage = () => {
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "rgba(255, 255, 255, 0.2)", backdropFilter: "blur(10px)", padding: "10px 24px", borderRadius: 30, color: "#fff" }}>
           <ThunderboltOutlined style={{ fontSize: 24, color: "#ffd166" }} />
-          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 0.5 }}>VinaCaptcha Setup Wizard</span>
+          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 0.5 }}>NhanHoaCaptcha Setup Wizard</span>
         </div>
       </div>
 
@@ -147,7 +147,7 @@ export const SetupWizardPage = () => {
           form={form}
           layout="vertical"
           initialValues={{
-            app_name: "VinaCaptcha Gateway",
+            app_name: "NhanHoaCaptcha Gateway",
             primary_domain: window.location.hostname || "localhost",
             admin_name: "Quản Trị Viên",
           }}
@@ -299,7 +299,7 @@ export const SetupWizardPage = () => {
             <div>
               <Result
                 status="success"
-                title="Khởi Tạo VinaCaptcha Thành Công!"
+                title="Khởi Tạo NhanHoaCaptcha Thành Công!"
                 subTitle="Hệ thống đã sẵn sàng bảo vệ các website và ứng dụng của bạn."
               />
 

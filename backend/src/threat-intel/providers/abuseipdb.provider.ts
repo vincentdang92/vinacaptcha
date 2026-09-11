@@ -39,7 +39,7 @@ export class AbuseIpDbProvider implements ThreatIntelSourceProvider {
           headers: {
             Key: apiKey,
             Accept: 'application/json',
-            'User-Agent': 'VinaCaptcha-ThreatIntel/1.0',
+            'User-Agent': 'NhanHoaCaptcha-ThreatIntel/1.0',
           },
           signal: AbortSignal.timeout(30000), // Endpoint này có thể chậm với 10k records
         },
