@@ -35,6 +35,7 @@ describe('AdminService', () => {
 
   const mockMailService = {
     getSmtpStatus: () => ({ is_configured: true }),
+    saveSmtpConfig: () => Promise.resolve({ success: true }),
     testConnection: () => Promise.resolve({ success: true }),
     sendActivationEmail: () => Promise.resolve({ success: true }),
     sendQuotaWarningEmail: () => Promise.resolve({ success: true }),

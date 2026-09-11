@@ -1,8 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, DataSource } from 'typeorm';
 import * as nodemailer from 'nodemailer';
+import { SystemSetting } from './entities/system-setting.entity.js';
+
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from_name: string;
+  from_email: string;
+  ignore_tls: boolean;
+}
 
 export interface SmtpStatus {
   is_configured: boolean;
+  source: 'database' | 'env' | 'none';
   host: string;
   port: number;
   secure: boolean;
@@ -10,6 +25,7 @@ export interface SmtpStatus {
   from_name: string;
   from_email: string;
   ignore_tls: boolean;
+  has_password: boolean;
 }
 
 export interface SendMailResult {
@@ -19,91 +35,263 @@ export interface SendMailResult {
 }
 
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
+  private cachedDbConfig: SmtpConfig | null = null;
+
+  constructor(
+    @Optional()
+    @InjectRepository(SystemSetting)
+    private readonly settingsRepo?: Repository<SystemSetting>,
+    @Optional()
+    private readonly dataSource?: DataSource,
+  ) {}
+
+  async onModuleInit() {
+    await this.ensureSettingsTable();
+    await this.loadConfigFromDb();
+  }
 
   /**
-   * Khởi tạo Transporter Nodemailer từ biến môi trường
+   * Đảm bảo bảng system_settings luôn tồn tại trong cơ sở dữ liệu
    */
-  private createTransporter(customConfig?: Partial<{
-    host: string;
-    port: number;
-    secure: boolean;
-    user: string;
-    pass: string;
-    ignoreTls: boolean;
-  }>) {
-    const host = customConfig?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
-    const port = customConfig?.port ?? (parseInt(process.env.SMTP_PORT || '587', 10) || 587);
-    const user = customConfig?.user ?? (process.env.SMTP_USER || '');
-    const pass = customConfig?.pass ?? (process.env.SMTP_PASS || '');
-    
-    // Tự động suy luận secure: true nếu port 465 hoặc cấu hình SMTP_SECURE=true
-    const secure = customConfig?.secure ?? (
-      process.env.SMTP_SECURE === 'true' || port === 465
-    );
+  private async ensureSettingsTable() {
+    if (!this.dataSource) return;
+    try {
+      await this.dataSource.query(`
+        CREATE TABLE IF NOT EXISTS system_settings (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+      `);
+    } catch (err: any) {
+      this.logger.warn(`Không thể tự động tạo bảng system_settings: ${err.message}`);
+    }
+  }
 
-    const ignoreTls = customConfig?.ignoreTls ?? (
-      process.env.SMTP_IGNORE_TLS === 'true' || process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false'
-    );
+  /**
+   * Nạp cấu hình SMTP từ database vào bộ nhớ
+   */
+  async loadConfigFromDb(): Promise<SmtpConfig | null> {
+    if (!this.settingsRepo && !this.dataSource) return null;
+    try {
+      if (this.settingsRepo) {
+        const setting = await this.settingsRepo.findOneBy({ key: 'smtp' });
+        if (setting?.value && typeof setting.value === 'object') {
+          this.cachedDbConfig = setting.value as SmtpConfig;
+          return this.cachedDbConfig;
+        }
+      } else if (this.dataSource) {
+        const rows = await this.dataSource.query(`SELECT value FROM system_settings WHERE key = 'smtp' LIMIT 1`);
+        if (rows && rows[0]?.value) {
+          this.cachedDbConfig = rows[0].value as SmtpConfig;
+          return this.cachedDbConfig;
+        }
+      }
+      this.cachedDbConfig = null;
+      return null;
+    } catch (err: any) {
+      this.logger.warn(`Lỗi khi đọc cấu hình SMTP từ DB: ${err.message}`);
+      this.cachedDbConfig = null;
+      return null;
+    }
+  }
 
-    const transportOptions: nodemailer.TransportOptions = {
+  /**
+   * Lấy cấu hình SMTP hiệu lực (Ưu tiên DB -> Fallback sang .env)
+   */
+  private getEffectiveConfig(customConfig?: Partial<SmtpConfig>): SmtpConfig {
+    const db = this.cachedDbConfig;
+
+    // 1. Host
+    const host = customConfig?.host || db?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
+
+    // 2. Port
+    const port = customConfig?.port ?? db?.port ?? (parseInt(process.env.SMTP_PORT || '587', 10) || 587);
+
+    // 3. User
+    const user = customConfig?.user !== undefined ? customConfig.user : (db?.user ?? process.env.SMTP_USER ?? '');
+
+    // 4. Pass
+    let pass = customConfig?.pass !== undefined ? customConfig.pass : (db?.pass ?? process.env.SMTP_PASS ?? '');
+    // Nếu customConfig truyền pass rỗng nhưng trước đó đã có pass trong DB -> giữ nguyên pass cũ
+    if (customConfig && customConfig.pass === '' && db?.pass) {
+      pass = db.pass;
+    }
+
+    // 5. Secure
+    let secure = customConfig?.secure;
+    if (secure === undefined) {
+      if (db?.secure !== undefined) {
+        secure = db.secure;
+      } else {
+        secure = process.env.SMTP_SECURE === 'true' || port === 465;
+      }
+    }
+
+    // 6. From Name
+    const fromName = customConfig?.from_name || db?.from_name || process.env.SMTP_FROM_NAME || 'NhanHoaCaptcha System';
+
+    // 7. From Email
+    const fromEmail = customConfig?.from_email || db?.from_email || process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || user || 'no-reply@nhanhoa.com';
+
+    // 8. Ignore TLS
+    let ignoreTls = customConfig?.ignore_tls;
+    if (ignoreTls === undefined) {
+      if (db?.ignore_tls !== undefined) {
+        ignoreTls = db.ignore_tls;
+      } else {
+        ignoreTls = process.env.SMTP_IGNORE_TLS === 'true' || process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false';
+      }
+    }
+
+    return {
       host,
       port,
-      secure,
-      auth: user && pass ? { user, pass } : undefined,
-      tls: ignoreTls ? { rejectUnauthorized: false } : undefined,
+      secure: Boolean(secure),
+      user,
+      pass,
+      from_name: fromName,
+      from_email: fromEmail,
+      ignore_tls: Boolean(ignoreTls),
+    };
+  }
+
+  /**
+   * Khởi tạo Transporter Nodemailer
+   */
+  private createTransporter(customConfig?: Partial<SmtpConfig>) {
+    const config = this.getEffectiveConfig(customConfig);
+
+    const transportOptions: nodemailer.TransportOptions = {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
+      tls: config.ignore_tls ? { rejectUnauthorized: false } : undefined,
     } as any;
 
     return nodemailer.createTransport(transportOptions);
   }
 
   /**
-   * Lấy thông tin cấu hình SMTP hiện tại (ẩn mật khẩu)
+   * Lấy thông tin cấu hình SMTP hiện tại (để hiển thị và chỉnh sửa trên Dashboard)
    */
   getSmtpStatus(): SmtpStatus {
-    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const port = parseInt(process.env.SMTP_PORT || '587', 10) || 587;
-    const user = process.env.SMTP_USER || '';
-    const pass = process.env.SMTP_PASS || '';
-    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-    const fromName = process.env.SMTP_FROM_NAME || 'NhanHoaCaptcha System';
-    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || user || 'no-reply@nhanhoa.com';
-    const ignoreTls = process.env.SMTP_IGNORE_TLS === 'true' || process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false';
+    const config = this.getEffectiveConfig();
+    let source: 'database' | 'env' | 'none' = 'none';
+    let isConfigured = false;
+
+    if (this.cachedDbConfig) {
+      source = 'database';
+      isConfigured = Boolean(
+        this.cachedDbConfig.host && (this.cachedDbConfig.user ? Boolean(this.cachedDbConfig.pass) : true),
+      );
+    } else if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      source = 'env';
+      isConfigured = true;
+    } else if (process.env.SMTP_HOST && (process.env.SMTP_USER ? Boolean(process.env.SMTP_PASS) : false)) {
+      source = 'env';
+      isConfigured = true;
+    }
+
+    const hasPassword = Boolean(config.pass);
 
     return {
-      is_configured: Boolean(user && pass),
-      host,
-      port,
-      secure,
-      user: user ? user.replace(/(.{2})(.*)(@.*)/, '$1***$3') : '',
-      from_name: fromName,
-      from_email: fromEmail,
-      ignore_tls: ignoreTls,
+      is_configured: isConfigured,
+      source,
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      user: config.user,
+      from_name: config.from_name,
+      from_email: config.from_email,
+      ignore_tls: config.ignore_tls,
+      has_password: hasPassword,
+    };
+  }
+
+  /**
+   * Lưu hoặc cập nhật cấu hình SMTP vào cơ sở dữ liệu PostgreSQL
+   */
+  async saveSmtpConfig(dto: Partial<SmtpConfig>): Promise<{ success: boolean; message: string; config: SmtpStatus }> {
+    // Nếu pass để trống, giữ lại pass đã lưu trước đó trong DB hoặc .env
+    let finalPass = dto.pass?.trim();
+    if (!finalPass) {
+      if (this.cachedDbConfig?.pass) {
+        finalPass = this.cachedDbConfig.pass;
+      } else if (process.env.SMTP_PASS) {
+        finalPass = process.env.SMTP_PASS;
+      } else {
+        finalPass = '';
+      }
+    }
+
+    const newConfig: SmtpConfig = {
+      host: dto.host?.trim() || 'smtp.gmail.com',
+      port: Number(dto.port) || 587,
+      secure: dto.secure ?? (Number(dto.port) === 465),
+      user: dto.user?.trim() || '',
+      pass: finalPass,
+      from_name: dto.from_name?.trim() || 'NhanHoaCaptcha System',
+      from_email: dto.from_email?.trim() || dto.user?.trim() || 'no-reply@nhanhoa.com',
+      ignore_tls: Boolean(dto.ignore_tls),
+    };
+
+    await this.ensureSettingsTable();
+
+    if (this.settingsRepo) {
+      const setting = this.settingsRepo.create({
+        key: 'smtp',
+        value: newConfig,
+      });
+      await this.settingsRepo.save(setting);
+    } else if (this.dataSource) {
+      await this.dataSource.query(
+        `INSERT INTO system_settings (key, value, updated_at) 
+         VALUES ('smtp', $1, NOW()) 
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(newConfig)],
+      );
+    }
+
+    this.cachedDbConfig = newConfig;
+    this.logger.log(`💾 Đã lưu cấu hình SMTP mới vào database (Host: ${newConfig.host}:${newConfig.port}, User: ${newConfig.user})`);
+
+    return {
+      success: true,
+      message: 'Cấu hình cổng email SMTP đã được lưu vào cơ sở dữ liệu thành công!',
+      config: this.getSmtpStatus(),
     };
   }
 
   /**
    * Kiểm tra kết nối SMTP và gửi email thử nghiệm (nếu có email nhận)
    */
-  async testConnection(targetEmail?: string): Promise<{ success: boolean; message: string; details?: any }> {
-    const status = this.getSmtpStatus();
-    if (!status.is_configured) {
+  async testConnection(
+    targetEmail?: string,
+    customConfig?: Partial<SmtpConfig>,
+  ): Promise<{ success: boolean; message: string; details?: any }> {
+    const config = this.getEffectiveConfig(customConfig);
+
+    if (config.user && !config.pass) {
       return {
         success: false,
-        message: 'Chưa cấu hình thông tin đăng nhập SMTP (SMTP_USER / SMTP_PASS). Vui lòng kiểm tra file .env',
+        message: 'Tài khoản SMTP có Username nhưng chưa nhập Mật khẩu / App Password.',
       };
     }
 
     try {
-      const transporter = this.createTransporter();
-      // 1. Kiểm tra xác thực máy chủ SMTP
+      const transporter = this.createTransporter(customConfig);
+      // 1. Kiểm tra bắt tay (handshake) và xác thực máy chủ SMTP
       await transporter.verify();
 
       // 2. Nếu có email nhận -> Gửi thử 1 email test
       if (targetEmail) {
-        const fromName = process.env.SMTP_FROM_NAME || 'NhanHoaCaptcha System';
-        const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@nhanhoa.com';
+        const fromName = config.from_name || 'NhanHoaCaptcha System';
+        const fromEmail = config.from_email || config.user || 'no-reply@nhanhoa.com';
+        const sourceLabel = this.cachedDbConfig ? 'Cơ sở dữ liệu (PostgreSQL)' : 'Biến môi trường (.env)';
         
         const info = await transporter.sendMail({
           from: `"${fromName}" <${fromEmail}>`,
@@ -120,7 +308,8 @@ export class MailService {
               
               <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin: 20px 0;">
                 <div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">THÔNG TIN KẾT NỐI SMTP:</div>
-                <div style="font-size: 13px; color: #1e293b; margin: 4px 0;">• <b>Máy chủ:</b> ${status.host}:${status.port} (${status.secure ? 'SSL/TLS' : 'STARTTLS'})</div>
+                <div style="font-size: 13px; color: #1e293b; margin: 4px 0;">• <b>Nguồn cấu hình:</b> ${sourceLabel}</div>
+                <div style="font-size: 13px; color: #1e293b; margin: 4px 0;">• <b>Máy chủ:</b> ${config.host}:${config.port} (${config.secure ? 'SSL/TLS' : 'STARTTLS'})</div>
                 <div style="font-size: 13px; color: #1e293b; margin: 4px 0;">• <b>Người gửi:</b> ${fromName} &lt;${fromEmail}&gt;</div>
                 <div style="font-size: 13px; color: #1e293b; margin: 4px 0;">• <b>Thời gian kiểm tra:</b> ${new Date().toLocaleString('vi-VN')}</div>
               </div>
@@ -158,8 +347,10 @@ export class MailService {
    * Gửi email kích hoạt tài khoản người dùng
    */
   async sendActivationEmail(email: string, name: string, token: string): Promise<SendMailResult> {
-    const status = this.getSmtpStatus();
-    if (!status.is_configured) {
+    const config = this.getEffectiveConfig();
+    const isConfigured = Boolean(config.host && (config.user ? config.pass : true));
+
+    if (!isConfigured) {
       this.logger.warn(`[MailService] Bỏ qua gửi email kích hoạt cho ${email} vì chưa cấu hình SMTP.`);
       return { success: false, error: 'smtp_not_configured' };
     }
@@ -169,8 +360,8 @@ export class MailService {
       const appUrl = process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
       const activationLink = `${appUrl}/admin/v1/auth/activate?token=${token}`;
 
-      const fromName = process.env.SMTP_FROM_NAME || 'NhanHoaCaptcha System';
-      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@nhanhoa.com';
+      const fromName = config.from_name;
+      const fromEmail = config.from_email;
 
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromEmail}>`,
@@ -234,8 +425,10 @@ export class MailService {
     limit: number,
     threshold: number,
   ): Promise<SendMailResult> {
-    const status = this.getSmtpStatus();
-    if (!status.is_configured) {
+    const config = this.getEffectiveConfig();
+    const isConfigured = Boolean(config.host && (config.user ? config.pass : true));
+
+    if (!isConfigured) {
       this.logger.warn(`[MailService] Bỏ qua gửi mail cảnh báo cho ${email} vì chưa cấu hình SMTP.`);
       return { success: false, error: 'smtp_not_configured' };
     }
@@ -248,8 +441,8 @@ export class MailService {
           : `[NhanHoaCaptcha] Cảnh báo: Tài khoản của bạn đã sử dụng 80% hạn mức Captcha`;
 
       const alertColor = threshold >= 100 ? '#ea5455' : '#ff9f43';
-      const fromName = process.env.SMTP_FROM_NAME || 'NhanHoaCaptcha Alert';
-      const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@nhanhoa.com';
+      const fromName = config.from_name || 'NhanHoaCaptcha Alert';
+      const fromEmail = config.from_email || 'no-reply@nhanhoa.com';
 
       const html = `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background: #ffffff;">

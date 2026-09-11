@@ -271,9 +271,16 @@ export class AdminController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('smtp/config')
+  async saveSmtpConfig(@Body() body: any) {
+    return this.adminService.saveSmtpConfig(body);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Post('smtp/test')
-  async testSmtp(@Body() body: { email?: string }) {
-    return this.adminService.testSmtpConnection(body?.email);
+  async testSmtp(@Body() body: { email?: string; config?: any }) {
+    return this.adminService.testSmtpConnection(body?.email, body?.config);
   }
 }
+
 

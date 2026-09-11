@@ -454,9 +454,14 @@ export class AdminService {
     return this.mailService.getSmtpStatus();
   }
 
-  async testSmtpConnection(targetEmail?: string) {
-    return this.mailService.testConnection(targetEmail);
+  async saveSmtpConfig(config: any) {
+    return this.mailService.saveSmtpConfig(config);
   }
+
+  async testSmtpConnection(targetEmail?: string, customConfig?: any) {
+    return this.mailService.testConnection(targetEmail, customConfig);
+  }
+
 
   async activateAccount(token: string) {
     const acc = await this.accountsRepo.findOneBy({ activation_token: token });
