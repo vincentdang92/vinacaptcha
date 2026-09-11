@@ -160,16 +160,29 @@ echo -e "🐳 [2/3] Đang build và khởi động hệ thống Docker..."
 docker compose build --parallel
 
 # ==========================================================
-# 6. KHỞI ĐỘNG DỊCH VỤ BACKGROUND
+# 6. KHỞI ĐỘNG DỊCH VỤ BACKGROUND & KIỂM TRA TRẠNG THÁI
 # ==========================================================
-echo -e "⚡ [3/3] Khởi động các container..."
-docker compose up -d
+echo -e "⚡ [3/3] Khởi động các container dịch vụ..."
+docker compose up -d --remove-orphans
+
+echo -e "\n⏳ Đang kiểm tra trạng thái hoạt động của các container..."
+sleep 3
+docker compose ps
+
+# Lấy địa chỉ IP Public của máy chủ
+SERVER_IP=$(curl -4s --connect-timeout 3 https://ifconfig.me 2>/dev/null || curl -4s --connect-timeout 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}' || echo "localhost")
 
 echo ""
-echo -e "${GREEN}==========================================================${NC}"
-echo -e "${GREEN}🎉 [NhanHoaCaptcha] Triển khai thành công!${NC}"
-echo -e "${GREEN}==========================================================${NC}"
-echo -e "🌐 Dashboard / Setup  : ${BLUE}http://localhost${NC} (hoặc http://IP_VPS của bạn)"
-echo -e "📡 Widget Script       : ${BLUE}http://localhost/widget/vina-captcha.js${NC}"
-echo -e "🚀 Trình cài đặt CMS   : Truy cập trang chủ lần đầu để điền tên miền & tạo Super Admin"
-echo -e "${GREEN}==========================================================${NC}"
+echo -e "${GREEN}================================================================${NC}"
+echo -e "${GREEN}🎉 [NhanHoaCaptcha] Triển khai thành công trọn gói!${NC}"
+echo -e "${GREEN}================================================================${NC}"
+echo -e "🌐 Dashboard / Setup  : ${BLUE}http://${SERVER_IP}${NC}"
+echo -e "📡 Widget Script       : ${BLUE}http://${SERVER_IP}/widget/vina-captcha.js${NC}"
+echo -e "⚡ Public API Gateway  : ${BLUE}http://${SERVER_IP}/v1/issue${NC}"
+echo -e "----------------------------------------------------------------"
+echo -e "👉 ${YELLOW}BƯỚC 1:${NC} Mở trình duyệt truy cập ${BLUE}http://${SERVER_IP}${NC} để hoàn tất"
+echo -e "   thiết lập ban đầu qua màn hình ${GREEN}Setup Wizard${NC} (Tạo Super Admin & Domain)."
+echo -e "👉 ${YELLOW}BƯỚC 2 (Sau khi trỏ domain):${NC} Kích hoạt HTTPS tự động bằng lệnh:"
+echo -e "   ${CYAN}./ssl.sh <ten_mien_cua_ban>${NC}"
+echo -e "${GREEN}================================================================${NC}\n"
+

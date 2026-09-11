@@ -193,3 +193,11 @@ INSERT INTO threat_intel_source_configs (source_key, enabled, sync_interval_minu
     ('firehol_level1', true, 1440, 'pull'),
     ('firehol_level2', true, 1440, 'pull')
 ON CONFLICT (source_key) DO NOTHING;
+
+-- 11. SYSTEM SETTINGS (Cấu hình hệ thống động như SMTP, Global Flags...)
+CREATE TABLE IF NOT EXISTS system_settings (
+    key         TEXT PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
