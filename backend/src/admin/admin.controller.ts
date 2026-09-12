@@ -183,7 +183,14 @@ export class AdminController {
   }
 
   // IP REPUTATION — Quản lý IP bị flag/banned
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard)
+  @Get('ip-reputation/stats')
+  @Header('Cache-Control', 'no-store, no-cache')
+  async getIpReputationStats() {
+    return this.adminService.getIpReputationStats();
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('ip-reputation')
   @Header('Cache-Control', 'no-store, no-cache')
   async getIpReputation(
@@ -191,10 +198,11 @@ export class AdminController {
     @Query('_end') endParam?: string,
     @Query('pageSize') pageSize?: string,
     @Query('currentPage') currentPage?: string,
+    @Query('q') qParam?: string,
+    @Query('search') searchParam?: string,
+    @Query('status') statusParam?: string,
     @Res({ passthrough: true }) res?: any,
   ) {
-    // Refine simple-rest gửi _start/_end (offset-based)
-    // Refine có thể gửi pageSize/currentPage tuỳ version
     let start = 0;
     let end = 20;
     if (startParam !== undefined) {
@@ -206,7 +214,14 @@ export class AdminController {
       start = (cp - 1) * ps;
       end = start + ps;
     }
-    return this.adminService.getIpReputation(start, end, res);
+    const q = qParam || searchParam;
+    return this.adminService.getIpReputation(start, end, q, statusParam, res);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('ip-reputation')
+  async addIpReputation(@Body() body: any) {
+    return this.adminService.addOrUpdateIpReputation(body);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -219,6 +234,12 @@ export class AdminController {
   @Post('ip-reputation/:ip/unban')
   async unbanIp(@Param('ip') ip: string) {
     return this.adminService.setIpBanStatus(ip, false);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Delete('ip-reputation/:ip')
+  async deleteIp(@Param('ip') ip: string) {
+    return this.adminService.deleteIpReputation(ip);
   }
 
   // ─── Quản lý Quota (Người dùng hiện tại) ───────────────────────────────────

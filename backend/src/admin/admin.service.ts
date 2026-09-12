@@ -783,51 +783,190 @@ export class AdminService {
 
   // IP REPUTATION ─────────────────────────────────────────────────────────────
 
-  async getIpReputation(start: number, end: number, res?: any) {
+  async getIpReputation(start: number, end: number, q?: string, status?: string, res?: any) {
     const limit = Math.max(1, end - start);
-    
-    // Convert cidr to string format explicitly to avoid array/object serialization issues from node-postgres
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (q && q.trim().length > 0) {
+      const cleanQ = q.trim();
+      conditions.push(`(ip_cidr::text ILIKE $${paramIndex})`);
+      params.push(`%${cleanQ}%`);
+      paramIndex++;
+    }
+
+    if (status && status !== 'all') {
+      if (status === 'banned') {
+        conditions.push(`fail_count > 10`);
+      } else if (status === 'warning') {
+        conditions.push(`fail_count >= 2 AND fail_count <= 10`);
+      } else if (status === 'active') {
+        conditions.push(`fail_count < 2`);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const queryParams = [...params, limit, start];
+    const limitOffsetClause = `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+
     const [rows, countRes] = await Promise.all([
       this.dataSource.query(
-        `SELECT ip_cidr::text as ip_cidr, fail_count, site_count_seen, last_seen_at
+        `SELECT ip_cidr::text as ip_cidr, fail_count, site_count_seen, first_seen_at, last_seen_at, updated_at
          FROM ip_reputation
+         ${whereClause}
          ORDER BY fail_count DESC, last_seen_at DESC
-         LIMIT $1 OFFSET $2`,
-         [limit, start]
+         ${limitOffsetClause}`,
+        queryParams,
       ),
-      this.dataSource.query(`SELECT COUNT(*) as count FROM ip_reputation`),
+      this.dataSource.query(
+        `SELECT COUNT(*) as count FROM ip_reputation ${whereClause}`,
+        params,
+      ),
     ]);
 
     const total = parseInt(countRes[0]?.count || '0', 10);
     res?.header?.('X-Total-Count', total.toString());
     res?.header?.('Access-Control-Expose-Headers', 'X-Total-Count');
 
-    const data = rows.map((r: any) => ({
-      id: r.ip_cidr,      // Refine cần trường `id` cho row key
-      ip_cidr: r.ip_cidr,
-      fail_count: r.fail_count,
-      site_count_seen: r.site_count_seen,
-      is_banned: r.fail_count > 10,
-      last_seen_at: r.last_seen_at,
-    }));
+    const data = rows.map((r: any) => {
+      const failCount = parseInt(r.fail_count, 10) || 0;
+      const isBanned = failCount > 10;
+      const riskLevel = isBanned ? 'banned' : failCount >= 5 ? 'high' : failCount >= 2 ? 'medium' : 'low';
+      return {
+        id: r.ip_cidr,      // Refine cần trường `id` cho row key
+        ip_cidr: r.ip_cidr,
+        fail_count: failCount,
+        site_count_seen: parseInt(r.site_count_seen, 10) || 1,
+        is_banned: isBanned,
+        risk_level: riskLevel,
+        first_seen_at: r.first_seen_at,
+        last_seen_at: r.last_seen_at,
+        updated_at: r.updated_at,
+      };
+    });
 
-    // Refine simple-rest data provider expects: array response body + X-Total-Count header
     return data;
   }
 
+  async getIpReputationStats() {
+    const stats = await this.dataSource.query(`
+      SELECT 
+        COUNT(*) as total_ips,
+        SUM(CASE WHEN fail_count > 10 THEN 1 ELSE 0 END) as banned_count,
+        SUM(CASE WHEN fail_count >= 2 AND fail_count <= 10 THEN 1 ELSE 0 END) as warning_count,
+        SUM(CASE WHEN site_count_seen >= 2 THEN 1 ELSE 0 END) as multi_site_count
+      FROM ip_reputation
+    `);
+
+    const row = stats[0] || {};
+    return {
+      total_ips: parseInt(row.total_ips, 10) || 0,
+      banned_count: parseInt(row.banned_count, 10) || 0,
+      warning_count: parseInt(row.warning_count, 10) || 0,
+      multi_site_count: parseInt(row.multi_site_count, 10) || 0,
+    };
+  }
+
+  async addOrUpdateIpReputation(body: { ip: string; fail_count?: number; is_banned?: boolean; reason?: string }) {
+    if (!body?.ip || typeof body.ip !== 'string') {
+      throw new BadRequestException('Địa chỉ IP / CIDR không hợp lệ');
+    }
+
+    const cleanIp = body.ip.trim();
+    // Validate IPv4 or CIDR format or IPv6
+    const ipCidrRegex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+    const isIpv6 = cleanIp.includes(':');
+    if (!ipCidrRegex.test(cleanIp) && !isIpv6) {
+      throw new BadRequestException('Định dạng địa chỉ IP hoặc CIDR không hợp lệ (VD: 1.2.3.4 hoặc 10.0.0.0/24)');
+    }
+
+    const isBanned = body.is_banned ?? true;
+    const failCount = body.fail_count !== undefined ? Math.max(0, parseInt(body.fail_count as any, 10) || 0) : (isBanned ? 11 : 5);
+
+    try {
+      await this.dataSource.query(`
+        INSERT INTO ip_reputation (ip_cidr, fail_count, site_count_seen, first_seen_at, last_seen_at, updated_at)
+        VALUES (
+          CASE 
+            WHEN $1 ~ '/' THEN $1::cidr 
+            ELSE set_masklen($1::inet, 32)::cidr 
+          END, 
+          $2, 
+          1, 
+          NOW(), 
+          NOW(), 
+          NOW()
+        )
+        ON CONFLICT (ip_cidr) DO UPDATE 
+        SET fail_count = EXCLUDED.fail_count,
+            last_seen_at = NOW(),
+            updated_at = NOW()
+      `, [cleanIp, failCount]);
+
+      return {
+        success: true,
+        ip: cleanIp,
+        fail_count: failCount,
+        is_banned: failCount > 10,
+        message: `Đã ${failCount > 10 ? 'cấm' : 'lưu'} IP ${cleanIp} thành công`,
+      };
+    } catch (err: any) {
+      throw new BadRequestException(`Lỗi khi lưu IP ${cleanIp}: ${err.message}`);
+    }
+  }
+
   async setIpBanStatus(ip: string, isBanned: boolean) {
-    // If banned, set fail_count = 11 to trigger is_banned logic. If unbanned, reset to 0
+    if (!ip) throw new BadRequestException('Thiếu địa chỉ IP');
+    const cleanIp = ip.trim();
     const failCount = isBanned ? 11 : 0;
     
-    await this.dataSource.query(`
-      INSERT INTO ip_reputation (ip_cidr, fail_count, last_seen_at)
-      VALUES ($1::inet, $2, NOW())
-      ON CONFLICT (ip_cidr) DO UPDATE 
-      SET fail_count = EXCLUDED.fail_count,
-          last_seen_at = EXCLUDED.last_seen_at
-    `, [ip, failCount]);
+    try {
+      await this.dataSource.query(`
+        INSERT INTO ip_reputation (ip_cidr, fail_count, site_count_seen, first_seen_at, last_seen_at, updated_at)
+        VALUES (
+          CASE 
+            WHEN $1 ~ '/' THEN $1::cidr 
+            ELSE set_masklen($1::inet, 32)::cidr 
+          END, 
+          $2, 
+          1, 
+          NOW(), 
+          NOW(), 
+          NOW()
+        )
+        ON CONFLICT (ip_cidr) DO UPDATE 
+        SET fail_count = EXCLUDED.fail_count,
+            last_seen_at = NOW(),
+            updated_at = NOW()
+      `, [cleanIp, failCount]);
 
-    return { success: true, ip, is_banned: isBanned };
+      return { success: true, ip: cleanIp, is_banned: isBanned, fail_count: failCount };
+    } catch (err: any) {
+      throw new BadRequestException(`Lỗi khi cập nhật IP ${cleanIp}: ${err.message}`);
+    }
+  }
+
+  async deleteIpReputation(ip: string) {
+    if (!ip) throw new BadRequestException('Thiếu địa chỉ IP');
+    const cleanIp = ip.trim();
+
+    try {
+      await this.dataSource.query(`
+        DELETE FROM ip_reputation 
+        WHERE ip_cidr = (
+          CASE 
+            WHEN $1 ~ '/' THEN $1::cidr 
+            ELSE set_masklen($1::inet, 32)::cidr 
+          END
+        )
+      `, [cleanIp]);
+
+      return { success: true, ip: cleanIp, message: `Đã xóa IP ${cleanIp} khỏi danh sách theo dõi` };
+    } catch (err: any) {
+      throw new BadRequestException(`Lỗi khi xóa IP ${cleanIp}: ${err.message}`);
+    }
   }
 }
 
