@@ -23,11 +23,16 @@ export const RegisterPage = () => {
     try {
       captchaToken = await executeSliderCaptcha("register");
     } catch (cErr: any) {
-      message.warning("Bạn chưa hoàn tất xác thực Slider Captcha. Vui lòng thử lại.");
+      message.warning(cErr?.message || "Bạn chưa hoàn tất xác thực Slider Captcha. Vui lòng thử lại.");
       setVerifyingCaptcha(false);
       return;
     }
     setVerifyingCaptcha(false);
+
+    if (!captchaToken) {
+      message.warning("Bạn chưa hoàn tất xác thực Slider Captcha. Vui lòng thử lại.");
+      return;
+    }
 
     setSubmitting(true);
     try {

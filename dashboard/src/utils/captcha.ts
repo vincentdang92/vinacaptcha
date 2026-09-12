@@ -36,9 +36,13 @@ export const executeSliderCaptcha = async (action: 'login' | 'register' = 'login
       baseUrl: baseUrl || window.location.origin,
     });
 
-    return token || '';
-  } catch (err) {
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      throw new Error('Vị trí ghép hình chưa chính xác hoặc chưa hoàn tất xác thực.');
+    }
+
+    return token.trim();
+  } catch (err: any) {
     console.error('[Captcha] Slider challenge execution error:', err);
-    throw err;
+    throw (err instanceof Error) ? err : new Error(err?.message || 'Xác thực Slider Captcha thất bại.');
   }
 };

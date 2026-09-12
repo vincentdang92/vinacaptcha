@@ -14,6 +14,7 @@ interface NhanHoaCaptchaConfig {
 type BadgeState = 'idle' | 'loading' | 'success' | 'error';
 
 interface SliderChallengeData {
+  x?: number;
   y: number;
   seed: number;
   puzzle_size: number;
@@ -718,8 +719,8 @@ class NhanHoaCaptcha {
       const bgCtx = bgCanvas.getContext('2d')!;
       this.renderProceduralBackground(bgCtx, canvasWidth, canvasHeight, seed);
 
-      // Draw Cutout Slot (Placeholder position for visual fit)
-      const slotX = 140;
+      // Draw Cutout Slot (Position from sliderData)
+      const slotX = sliderData?.x ?? 140;
       bgCtx.save();
       this.drawPuzzlePath(bgCtx, slotX, targetY, puzzleSize);
       bgCtx.fillStyle = 'rgba(0, 0, 0, 0.65)';

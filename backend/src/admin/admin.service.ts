@@ -410,11 +410,12 @@ export class AdminService {
   }
 
   async verifyAuthCaptcha(captchaToken?: string) {
-    if (!captchaToken) {
-      if (process.env.AUTH_CAPTCHA_REQUIRED === 'true') {
-        throw new BadRequestException('Vui lòng hoàn thành xác thực Slider Captcha trước khi tiếp tục.');
-      }
+    if (process.env.AUTH_CAPTCHA_DISABLED === 'true') {
       return true;
+    }
+
+    if (!captchaToken || typeof captchaToken !== 'string' || !captchaToken.trim()) {
+      throw new BadRequestException('Vui lòng hoàn thành xác thực Slider Captcha trước khi tiếp tục.');
     }
 
     if (!this.verifyService) {
@@ -424,11 +425,11 @@ export class AdminService {
     const secret = process.env.AUTH_CAPTCHA_SECRET || 'cap_live_6f1a95f9fedee61651fae43c';
     const result = await this.verifyService.siteVerify({
       secret,
-      verify_token: captchaToken,
+      verify_token: captchaToken.trim(),
     });
 
     if (!result.success) {
-      throw new BadRequestException(`Xác thực Slider Captcha không hợp lệ (${result.reason || 'failed'}). Vui lòng thử lại.`);
+      throw new BadRequestException(`Xác thực Slider Captcha không hợp lệ (${result.reason || 'failed'}). Vui lòng kéo lại thanh trượt.`);
     }
     return true;
   }

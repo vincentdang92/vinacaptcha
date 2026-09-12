@@ -43,6 +43,12 @@ export const LoginPage = () => {
     try {
       captchaToken = await executeSliderCaptcha("login");
     } catch (cErr: any) {
+      setErrorMessage(cErr?.message || "Bạn chưa hoàn thành xác thực Slider Captcha. Vui lòng thử lại.");
+      setVerifyingCaptcha(false);
+      return;
+    }
+
+    if (!captchaToken) {
       setErrorMessage("Bạn chưa hoàn thành xác thực Slider Captcha. Vui lòng thử lại.");
       setVerifyingCaptcha(false);
       return;

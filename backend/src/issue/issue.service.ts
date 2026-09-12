@@ -164,17 +164,18 @@ export class IssueService {
     const sessionId = uuidv4();
     const expiresIn = 60; // 60s TTL theo ARCHITECTURE.md 3.2
 
-    let sliderData: { y: number; seed: number; puzzle_size: number } | undefined = undefined;
+    let sliderData: { x?: number; y: number; seed: number; puzzle_size: number } | undefined = undefined;
     let targetX: number | undefined = undefined;
     let targetY: number | undefined = undefined;
 
     if (effectiveChallengeType === 'slider') {
-      targetX = Math.floor(Math.random() * 170) + 50; // 50px đến 220px
-      targetY = Math.floor(Math.random() * 75) + 25;  // 25px đến 100px
+      targetX = Math.floor(Math.random() * 140) + 60; // 60px đến 200px (canvas width 280, puzzle piece 40)
+      targetY = Math.floor(Math.random() * 70) + 25;  // 25px đến 95px
       const seed = Math.floor(Math.random() * 1000000);
       const puzzleSize = 40;
 
       sliderData = {
+        x: targetX,
         y: targetY,
         seed,
         puzzle_size: puzzleSize,
@@ -190,7 +191,7 @@ export class IssueService {
       breakdown: riskEval.breakdown,
       targetX,
       targetY,
-      sliderTolerance: 5,
+      sliderTolerance: 7,
     });
 
     await this.redisService.setOneTimeToken(`session:${sessionId}`, expiresIn, sessionData);
