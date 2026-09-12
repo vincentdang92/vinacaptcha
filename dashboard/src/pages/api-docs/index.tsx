@@ -9,6 +9,9 @@ import {
   ThunderboltOutlined,
   DownloadOutlined,
   RobotOutlined,
+  SlidersOutlined,
+  PictureOutlined,
+  ExperimentOutlined,
 } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
@@ -17,7 +20,7 @@ const BASE_URL = typeof window !== "undefined" && window.location ? window.locat
 
 const SKILL_MD_TEXT = `---
 name: vina-captcha-integration
-description: Hướng dẫn tích hợp hệ thống xác thực chống bot NhanHoaCaptcha vào đa nền tảng (Web, Laravel, WordPress, NodeJS, Python, Mobile App).
+description: Hướng dẫn tích hợp hệ thống xác thực chống bot NhanHoaCaptcha vào đa nền tảng (Web, Laravel, WordPress, NodeJS, Python, Mobile App, Slider Captcha).
 ---
 
 # NhanHoaCaptcha Integration Skill for AI Coding Agents
@@ -37,15 +40,66 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
 
 ## 2. Nguyên Lý Tích Hợp (2 Bước Bắt Buộc)
 
-1. **Frontend (Client) — Có 2 cách tích hợp tùy chọn**:
-   - **Cách A (Tự Động — Khuyến nghị)**: Thêm \`<div id="vina-captcha-container"></div>\` vào form và gọi \`new NhanHoaCaptcha("vina-captcha-container", "YOUR_SITE_KEY_UUID")\`. Widget sẽ tự động bắt sự kiện submit, chấm điểm bot, hiển thị thử thách nếu cần và gán token vào input \`#vina_captcha_token\`.
-   - **Cách B (Chủ Động Khi Submit — reCAPTCHA v3 Style)**: Bắt sự kiện \`form.addEventListener('submit')\`, \`e.preventDefault()\`, và gọi \`NhanHoaCaptcha.ready()\` + \`NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(token => ...)\` để nhận token, gán vào form và submit chủ động kèm loading modal.
+1. **Frontend (Client) — Có 3 cách tích hợp tùy chọn**:
+   - **Cách A (Tự Động — Invisible)**: Thêm \`<div id="vina-captcha-container"></div>\` vào form và gọi \`new NhanHoaCaptcha("vina-captcha-container", { siteKey: "YOUR_SITE_KEY_UUID" })\`.
+   - **Cách B (Chủ Động Khi Submit — reCAPTCHA v3 Style)**: Bắt sự kiện \`form.addEventListener('submit')\`, \`e.preventDefault()\`, và gọi \`NhanHoaCaptcha.ready()\` + \`NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(token => ...)\` để nhận token và submit form.
+   - **Cách C (Bắt Buộc Thử Thách Ghép Hình Slider Captcha)**: Truyền option \`forceChallenge: 'slider'\` vào Widget config hoặc gọi \`NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { forceChallenge: 'slider' })\`. Người dùng sẽ kéo thanh trượt khớp hình puzzle trước khi token được cấp. Hoặc đơn giản là chuyển **Challenge Mode** sang **"Luôn yêu cầu Slider Captcha"** trong Dashboard.
 2. **Backend (Server) & Chiến Lược Fail-Open Fallback (Timeout > 5s)**:
    - Server nhận \`vina_captcha_token\` từ request submit của client.
    - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\` với **Timeout tối đa 5 giây (5000ms)**.
    - **Giai đoạn thử nghiệm (Testing/Trial Mode)**: Nếu request bị treo quá 5s hoặc máy chủ Captcha trả về lỗi hệ thống (5xx), Backend của bạn nên **ƯU TIÊN CHO PASS (\`success: true\`)** để không gián đoạn giao dịch của người dùng thật.
    - Nếu \`success: true\` → Cho phép xử lý tiếp (Login, Register, Thanh toán...).
    - Nếu \`success: false\` → Chặn và báo lỗi "Xác thực Captcha thất bại".
+
+---
+
+## 3. Hướng Dẫn Tích Hợp Slider Captcha (Ghép Hình Tương Tác)
+
+### Cách 1: Tự động hiện Slider khi Submit (Container Form)
+\`\`\`html
+<form id="login-form" action="/login" method="POST">
+  <input type="text" name="username" placeholder="Tên đăng nhập" required />
+  <input type="password" name="password" placeholder="Mật khẩu" required />
+  
+  <div id="vina-captcha-box"></div>
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+  
+  <button type="submit">Đăng Nhập</button>
+</form>
+
+<script src="https://your-captcha-domain.com/widget/vina-captcha.js" defer></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    new NhanHoaCaptcha("vina-captcha-box", {
+      siteKey: "YOUR_PUBLIC_SITE_KEY_UUID",
+      forceChallenge: "slider", // Bật chế độ ghép hình
+      onSuccess: (token) => {
+        document.getElementById("vina_captcha_token").value = token;
+      }
+    });
+  });
+</script>
+\`\`\`
+
+### Cách 2: Gọi Chủ Động Khi Click Nút Đăng Nhập (Modal Popup)
+\`\`\`javascript
+document.querySelector("#login-form").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const form = this;
+
+  NhanHoaCaptcha.ready(() => {
+    NhanHoaCaptcha.execute("YOUR_PUBLIC_SITE_KEY_UUID", {
+      action: "login",
+      forceChallenge: "slider" // Bật popup slider ghép hình
+    }).then((token) => {
+      if (token) {
+        document.getElementById("vina_captcha_token").value = token;
+        form.submit();
+      }
+    });
+  });
+});
+\`\`\`
 
 ---
 
@@ -469,6 +523,33 @@ export const ApiDocsPage = () => {
                   </div>
                 ),
               },
+              {
+                key: "slider",
+                label: "Cách 3: Thử Thách Ghép Hình Slider (Interactive Puzzle)",
+                children: (
+                  <div>
+                    <Paragraph type="secondary">
+                      Ép buộc hiển thị popup ghép hình Slider Captcha tương tác cho người dùng trước khi submit form. Bạn cũng có thể bật tính năng này trực tiếp trong <strong>Quản lý Sites &rarr; Challenge Mode</strong> mà không cần đổi code.
+                    </Paragraph>
+                    <CodeBlock lang="js" code={`<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Thêm tham số forceChallenge: 'slider'
+    const captcha = new NhanHoaCaptcha('vina-captcha-container', {
+      siteKey: 'YOUR_SITE_KEY_UUID',
+      forceChallenge: 'slider', // Bắt buộc thử thách ghép hình
+      onSuccess: (token, score) => {
+        document.getElementById('vina_captcha_token').value = token;
+        console.log('Slider pass! Token:', token);
+      },
+      onError: (err) => {
+        console.error('Lỗi slider captcha:', err);
+      }
+    });
+  });
+</script>`} />
+                  </div>
+                ),
+              },
             ]}
           />
 
@@ -666,6 +747,348 @@ async function handleAjaxSubmit() {
             showIcon
             icon={<CheckCircleOutlined />}
             message="Hoàn tất! Widget sẽ tự động hoạt động ở chế độ invisible — người dùng thật không bị làm phiền bởi bất kỳ thử thách nào."
+          />
+        </div>
+      ),
+    },
+    {
+      key: "slider-captcha",
+      label: (
+        <span><SlidersOutlined /> Slider Captcha (Ghép Hình)</span>
+      ),
+      children: (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <Title level={4} style={{ margin: 0 }}>
+              🧩 Tích Hợp Thử Thách Ghép Hình (Slider Captcha)
+            </Title>
+            <Tag color="purple" style={{ fontWeight: 600 }}>INTERACTIVE PUZZLE</Tag>
+          </div>
+
+          <Paragraph type="secondary">
+            Slider Captcha là hình thức xác thực người dùng tương tác cao cấp. Khi kích hoạt, một hộp thoại hiện đại sẽ hiển thị ảnh nền kèm mảnh ghép puzzle bị khuyết. Người dùng kéo thanh trượt từ trái sang phải để đưa mảnh ghép khớp vào ô trống.
+          </Paragraph>
+
+          {/* 3 Thẻ Đặc Điểm Nổi Bật */}
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} md={8}>
+              <Card variant="borderless" style={{ background: "rgba(115, 103, 240, 0.04)", border: "1px solid rgba(115, 103, 240, 0.15)", borderRadius: 8, height: "100%" }}>
+                <Title level={5} style={{ color: "#7367f0", marginTop: 0 }}>
+                  <PictureOutlined style={{ marginRight: 8 }} />
+                  HTML5 Canvas Tự Sinh
+                </Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  Ảnh nền và đường cắt puzzle được vẽ trực tiếp bằng Canvas với mã seed ngẫu nhiên. Không load ảnh tĩnh từ server, chống hoàn toàn OCR và scraping.
+                </Text>
+              </Card>
+            </Col>
+            <Col xs={24} md={8}>
+              <Card variant="borderless" style={{ background: "rgba(40, 199, 111, 0.04)", border: "1px solid rgba(40, 199, 111, 0.15)", borderRadius: 8, height: "100%" }}>
+                <Title level={5} style={{ color: "#28c76f", marginTop: 0 }}>
+                  <ExperimentOutlined style={{ marginRight: 8 }} />
+                  Phân Tích Quỹ Đạo AI
+                </Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  Hệ thống kiểm tra tọa độ đích (&plusmn;5px), thời gian thao tác (&ge; 200ms) và tính toán vi sai gia tốc chuột / cảm ứng để ngăn chặn bot giải tự động.
+                </Text>
+              </Card>
+            </Col>
+            <Col xs={24} md={8}>
+              <Card variant="borderless" style={{ background: "rgba(0, 207, 232, 0.04)", border: "1px solid rgba(0, 207, 232, 0.15)", borderRadius: 8, height: "100%" }}>
+                <Title level={5} style={{ color: "#00cfe8", marginTop: 0 }}>
+                  <SafetyOutlined style={{ marginRight: 8 }} />
+                  Hỗ Trợ Mọi Thiết Bị
+                </Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  Tương thích hoàn hảo với màn hình cảm ứng (Touch Event) trên iOS/Android lẫn thao tác chuột trên máy tính để bàn. Tự động căn giữa màn hình.
+                </Text>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* 2 Cách Kích Hoạt */}
+          <Title level={5} style={{ color: "#7367f0" }}>Cách 1: Kích Hoạt Qua Dashboard (Không Cần Sửa Code Frontend — Khuyến Nghị)</Title>
+          <Alert
+            type="info"
+            showIcon
+            message="Chuyển chế độ mà không cần deploy lại website:"
+            description={
+              <ol style={{ paddingLeft: 20, margin: "8px 0" }}>
+                <li>Truy cập mục <strong>Quản lý Sites</strong> ở menu bên trái.</li>
+                <li>Bấm nút <strong>Sửa Site</strong> (biểu tượng bút chì) tại website bạn muốn cấu hình.</li>
+                <li>Tại mục <strong>Chế độ Thử thách (Challenge Mode)</strong>, chọn <strong>Luôn yêu cầu Slider Captcha</strong>.</li>
+                <li>Bấm <strong>Lưu thay đổi</strong>. Widget trên site của bạn sẽ lập tức kích hoạt thử thách Slider cho 100% lượt submit mà không cần sửa code!</li>
+              </ol>
+            }
+            style={{ marginBottom: 24 }}
+          />
+
+          <Title level={5} style={{ color: "#7367f0" }}>Cách 2: Ép Buộc Hiển Thị Slider Bằng Mã Code Client (forceChallenge: 'slider')</Title>
+          <Paragraph type="secondary">
+            Nếu bạn chỉ muốn bật Slider Captcha cho một số Form quan trọng (như Nạp Tiền, Đăng Ký, Đổi Mật Khẩu), bạn có thể truyền tham số <Text code>forceChallenge: 'slider'</Text> trực tiếp trong code:
+          </Paragraph>
+
+          <Tabs
+            defaultActiveKey="vanilla"
+            size="small"
+            items={[
+              {
+                key: "vanilla",
+                label: "1. HTML & JavaScript Thuần",
+                children: (
+                  <CodeBlock lang="html" code={`<!-- 1. Nhúng Script Widget -->
+<script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
+
+<!-- 2. Form HTML -->
+<form id="login-form" action="/api/login" method="POST">
+  <input type="text" name="username" placeholder="Tên đăng nhập" required />
+  <input type="password" name="password" placeholder="Mật khẩu" required />
+
+  <!-- Container Widget -->
+  <div id="vina-captcha-container"></div>
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+
+  <button type="submit">Đăng Nhập</button>
+</form>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // Khởi tạo Widget với forceChallenge: 'slider'
+    const captcha = new NhanHoaCaptcha("vina-captcha-container", {
+      siteKey: "YOUR_SITE_KEY_UUID",
+      forceChallenge: "slider", // BẮT BUỘC: Luôn hiển thị thử thách ghép hình
+      onSuccess: (token, score) => {
+        console.log("Xác thực Slider thành công! Token:", token);
+        document.getElementById("vina_captcha_token").value = token;
+      },
+      onError: (err) => {
+        console.error("Lỗi xác thực Slider:", err);
+      }
+    });
+  });
+</script>`} />
+                ),
+              },
+              {
+                key: "programmatic",
+                label: "2. Chặn Submit & Mở Popup Slider (Execute Style)",
+                children: (
+                  <CodeBlock lang="html" code={`<!-- Phù hợp cho form AJAX / Bootstrap Modal / Custom Button -->
+<script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
+
+<form id="register-form">
+  <input type="email" id="email" placeholder="Email đăng ký" required />
+  <input type="password" id="pwd" placeholder="Mật khẩu" required />
+  <button type="submit" id="btn-submit">Tạo Tài Khoản</button>
+</form>
+
+<script>
+  document.getElementById("register-form").addEventListener("submit", async function (e) {
+    e.preventDefault(); // Chặn reload trang
+    
+    // Gọi execute với forceChallenge: 'slider'
+    NhanHoaCaptcha.ready(() => {
+      NhanHoaCaptcha.execute("YOUR_SITE_KEY_UUID", {
+        action: "register",
+        forceChallenge: "slider" // Kích hoạt popup ghép hình
+      }).then(async (token) => {
+        if (!token) {
+          alert("Bạn chưa hoàn thành thử thách ghép hình.");
+          return;
+        }
+
+        // Gửi dữ liệu kèm token lên backend của bạn
+        const res = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("email").value,
+            password: document.getElementById("pwd").value,
+            vina_captcha_token: token
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          alert("Đăng ký thành công!");
+        } else {
+          alert("Lỗi: " + data.message);
+        }
+      });
+    });
+  });
+</script>`} />
+                ),
+              },
+              {
+                key: "react",
+                label: "3. React / Next.js (TypeScript Component)",
+                children: (
+                  <CodeBlock lang="tsx" code={`import React, { useEffect, useRef, useState } from 'react';
+
+declare global {
+  interface Window {
+    NhanHoaCaptcha?: any;
+  }
+}
+
+interface SliderCaptchaProps {
+  siteKey: string;
+  onSuccess: (token: string) => void;
+}
+
+export const NhanHoaSliderCaptcha: React.FC<SliderCaptchaProps> = ({ siteKey, onSuccess }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const captchaInstance = useRef<any>(null);
+
+  useEffect(() => {
+    // 1. Tự động load script nếu chưa có
+    if (!window.NhanHoaCaptcha) {
+      const script = document.createElement('script');
+      script.src = '${BASE_URL}/widget/vina-captcha.js';
+      script.async = true;
+      script.onload = () => initCaptcha();
+      document.body.appendChild(script);
+    } else {
+      initCaptcha();
+    }
+
+    function initCaptcha() {
+      if (containerRef.current && window.NhanHoaCaptcha && !captchaInstance.current) {
+        captchaInstance.current = new window.NhanHoaCaptcha(containerRef.current, {
+          siteKey,
+          forceChallenge: 'slider', // Ép buộc Slider Captcha
+          onSuccess: (token: string) => {
+            onSuccess(token);
+          },
+          onError: (err: any) => {
+            console.error('Slider captcha error:', err);
+          }
+        });
+      }
+    }
+  }, [siteKey, onSuccess]);
+
+  return <div ref={containerRef} id="vina-captcha-container" style={{ margin: '16px 0' }} />;
+};
+
+// Sử dụng trong Form:
+export const LoginForm = () => {
+  const [captchaToken, setCaptchaToken] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!captchaToken) {
+      alert('Vui lòng hoàn thành thử thách ghép hình!');
+      return;
+    }
+    // Gửi token lên backend...
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="text" placeholder="Username" required />
+      <input type="password" placeholder="Password" required />
+      <NhanHoaSliderCaptcha
+        siteKey="YOUR_SITE_KEY_UUID"
+        onSuccess={(token) => setCaptchaToken(token)}
+      />
+      <button type="submit">Đăng Nhập</button>
+    </form>
+  );
+};`} />
+                ),
+              },
+              {
+                key: "vue",
+                label: "4. Vue.js 3 (Composition API)",
+                children: (
+                  <CodeBlock lang="html" code={`<template>
+  <form @submit.prevent="handleLogin">
+    <input v-model="username" type="text" placeholder="Username" required />
+    <input v-model="password" type="password" placeholder="Password" required />
+    
+    <div ref="captchaContainer"></div>
+    
+    <button type="submit">Đăng Nhập</button>
+  </form>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+
+const username = ref('');
+const password = ref('');
+const captchaToken = ref('');
+const captchaContainer = ref(null);
+
+onMounted(() => {
+  const init = () => {
+    if (window.NhanHoaCaptcha && captchaContainer.value) {
+      new window.NhanHoaCaptcha(captchaContainer.value, {
+        siteKey: 'YOUR_SITE_KEY_UUID',
+        forceChallenge: 'slider',
+        onSuccess: (token) => {
+          captchaToken.value = token;
+        }
+      });
+    }
+  };
+
+  if (!window.NhanHoaCaptcha) {
+    const script = document.createElement('script');
+    script.src = '${BASE_URL}/widget/vina-captcha.js';
+    script.onload = init;
+    document.body.appendChild(script);
+  } else {
+    init();
+  }
+});
+
+const handleLogin = async () => {
+  if (!captchaToken.value) {
+    alert('Vui lòng kéo thanh trượt ghép hình!');
+    return;
+  }
+  // Gửi API login...
+};
+</script>`} />
+                ),
+              },
+            ]}
+          />
+
+          {/* Quy Trình Xác Minh Server */}
+          <Title level={5} style={{ color: "#7367f0", marginTop: 24 }}>Cơ Chế Xác Minh Phía Server (Backend Verification)</Title>
+          <Paragraph type="secondary">
+            Dù client sử dụng chế độ Invisible hay Slider Captcha, phía Server Backend của bạn <strong>chỉ cần xác minh duy nhất token <Text code>vina_captcha_token</Text></strong> thông qua endpoint <Text code>/v1/siteverify</Text>:
+          </Paragraph>
+
+          <CodeBlock lang="js" code={`// Backend (Node.js Express / PHP / Python)
+// POST ${BASE_URL}/v1/siteverify
+{
+  "secret": "cap_live_YOUR_SECRET_KEY",
+  "verify_token": req.body.vina_captcha_token
+}
+
+// Kết quả trả về nếu user ghép đúng:
+{
+  "success": true,
+  "score": 10,
+  "risk_level": "low",
+  "hostname": "yourdomain.com",
+  "timestamp": "2026-09-12T06:00:00.000Z"
+}
+
+// Nếu user giải sai tọa độ hoặc kéo bằng tool botnet:
+// (Hệ thống từ chối ngay ở bước giải thử thách, token không được cấp)`} />
+
+          <Alert
+            type="success"
+            showIcon
+            icon={<CheckCircleOutlined />}
+            message="Mẹo: Khi đăng nhập thất bại (sai mật khẩu), hãy gọi captcha.reset() để tạo mảnh ghép và ảnh nền mới cho lần đăng nhập tiếp theo."
+            style={{ marginTop: 16 }}
           />
         </div>
       ),
@@ -890,6 +1313,8 @@ Content-Type: application/json
             <tbody>
               {[
                 ["siteKey", "string", "✅", "Public Site Key (UUID) lấy từ mục Quản lý Sites"],
+                ["forceChallenge", "'auto' | 'slider' | 'pow' | 'none'", "❌", "Mặc định: 'auto'. Đặt 'slider' để ép buộc luôn hiển thị câu đố ghép hình Slider Captcha"],
+                ["hideBadge", "boolean", "❌", "Mặc định: false. Đặt true để ẩn huy hiệu badge bảo mật ở góc dưới màn hình"],
                 ["baseUrl", "string", "❌", `URL backend, mặc định: ${BASE_URL}`],
                 ["onSuccess", "function(token, score)", "❌", "Callback khi captcha pass, nhận verify_token và risk score"],
                 ["onError", "function(error)", "❌", "Callback khi có lỗi"],
@@ -922,8 +1347,8 @@ NhanHoaCaptcha.ready(function() {
 });
 
 // 3. NhanHoaCaptcha.execute(siteKey, options) -> Promise<string>
-// Lấy Token xác thực trực tiếp mà không cần thẻ container (reCAPTCHA v3 style)
-NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(function(token) {
+// Lấy Token xác thực trực tiếp (hỗ trợ forceChallenge: 'slider' hoặc 'auto')
+NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login', forceChallenge: 'slider' }).then(function(token) {
   console.log("Token nhận được:", token);
 });`} />
 
@@ -1013,6 +1438,39 @@ NhanHoaCaptcha.execute('YOUR_SITE_KEY_UUID', { action: 'login' }).then(function(
           }
         });
       });
+    });
+  });
+</script>`} />
+
+          <Title level={5} style={{ marginTop: 24 }}>Ví dụ 3: Bắt Buộc Thử Thách Ghép Hình Slider (forceChallenge: 'slider')</Title>
+          <Paragraph type="secondary">
+            Mẫu code nhúng trực tiếp cấu hình yêu cầu người dùng kéo mảnh ghép Slider Puzzle:
+          </Paragraph>
+          <CodeBlock lang="html" code={`<!-- Nhúng script widget -->
+<script src="${BASE_URL}/widget/vina-captcha.js" defer></script>
+
+<form id="payment-form" action="/pay" method="POST">
+  <input type="text" name="amount" placeholder="Số tiền thanh toán" required />
+  
+  <!-- Container chứa captcha -->
+  <div id="vina-captcha-box"></div>
+  <input type="hidden" name="vina_captcha_token" id="vina_captcha_token" />
+
+  <button type="submit">Xác Nhận Giao Dịch</button>
+</form>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    new NhanHoaCaptcha('vina-captcha-box', {
+      siteKey: 'YOUR_SITE_KEY_UUID',
+      forceChallenge: 'slider', // BẮT BUỘC HIỆN SLIDER GHÉP HÌNH
+      onSuccess: (token) => {
+        document.getElementById('vina_captcha_token').value = token;
+        console.log('Slider pass! Token:', token);
+      },
+      onError: (err) => {
+        console.error('Lỗi slider captcha:', err);
+      }
     });
   });
 </script>`} />
