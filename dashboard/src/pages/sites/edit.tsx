@@ -13,8 +13,9 @@ import {
   Tag,
   Modal,
   Alert,
-  message,
   Divider,
+  Drawer,
+  App,
 } from "antd";
 import {
   KeyOutlined,
@@ -26,14 +27,13 @@ import {
 
 const { Text, Title } = Typography;
 
-import { Drawer } from "antd";
-
 export const SiteEdit = ({
   drawerProps,
   formProps,
   saveButtonProps,
   id: siteId,
 }: any) => {
+  const { modal, message } = App.useApp();
   const apiUrl = useApiUrl();
   const { mutate } = useCustomMutation();
   const [newLabel, setNewLabel] = useState("");
@@ -74,7 +74,7 @@ export const SiteEdit = ({
   };
 
   const handleRevokeApiKey = (keyId: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: "Xác nhận thu hồi khóa API",
       content: "Bạn có chắc chắn muốn vô hiệu hóa khóa này? Mã nhúng widget đang dùng khóa này sẽ ngừng hoạt động ngay lập tức!",
       okText: "Thu hồi khóa",

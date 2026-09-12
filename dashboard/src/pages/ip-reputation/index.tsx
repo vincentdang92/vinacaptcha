@@ -16,9 +16,9 @@ import {
   InputNumber,
   Space,
   Tooltip,
-  message,
   theme,
   Popconfirm,
+  App,
 } from "antd";
 import {
   UserOutlined,
@@ -87,6 +87,7 @@ export const IpReputationPage = () => {
   const [selectedActionType, setSelectedActionType] = useState<"ban" | "warning" | "custom">("ban");
 
   const { token } = theme.useToken();
+  const { modal, message } = App.useApp();
 
   // ─── 1. Tải Dữ Liệu Thống Kê & Bảng ────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export const IpReputationPage = () => {
         setLoading(false);
       }
     },
-    [pagination.current, pagination.pageSize, searchText, statusFilter]
+    [pagination.current, pagination.pageSize, searchText, statusFilter, message]
   );
 
   useEffect(() => {
@@ -147,7 +148,7 @@ export const IpReputationPage = () => {
   // ─── 2. Các Hành Động Thao Tác (Ban / Unban / Add / Delete) ─────────────────
 
   const handleToggleBan = (ip: string, isCurrentlyBanned: boolean) => {
-    Modal.confirm({
+    modal.confirm({
       title: isCurrentlyBanned ? `Bỏ Cấm IP: ${ip}?` : `Cấm Khẩn Cấp IP: ${ip}?`,
       icon: <ExclamationCircleOutlined style={{ color: isCurrentlyBanned ? token.colorSuccess : token.colorError }} />,
       content: isCurrentlyBanned
