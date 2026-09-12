@@ -159,10 +159,10 @@ export const IpReputationPage = () => {
       onOk: async () => {
         try {
           const action = isCurrentlyBanned ? "unban" : "ban";
-          await axios.post(`${API_BASE_URL}/ip-reputation/${encodeURIComponent(ip)}/${action}`);
+          await axios.post(`${API_BASE_URL}/ip-reputation/${action}`, { ip });
           message.success(`Đã ${isCurrentlyBanned ? "bỏ cấm" : "cấm"} IP ${ip} thành công`);
-          fetchData(pagination.current, pagination.pageSize);
-          fetchStats();
+          await fetchData(pagination.current, pagination.pageSize);
+          await fetchStats();
         } catch (error: any) {
           message.error(error.response?.data?.message || "Thao tác cập nhật IP thất bại");
         }
@@ -172,10 +172,10 @@ export const IpReputationPage = () => {
 
   const handleDeleteIp = async (ip: string) => {
     try {
-      await axios.delete(`${API_BASE_URL}/ip-reputation/${encodeURIComponent(ip)}`);
+      await axios.post(`${API_BASE_URL}/ip-reputation/delete`, { ip });
       message.success(`Đã xóa IP ${ip} khỏi danh sách theo dõi`);
-      fetchData(pagination.current, pagination.pageSize);
-      fetchStats();
+      await fetchData(pagination.current, pagination.pageSize);
+      await fetchStats();
     } catch (error: any) {
       message.error(error.response?.data?.message || "Không thể xóa IP");
     }

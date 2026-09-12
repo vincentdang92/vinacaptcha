@@ -225,6 +225,24 @@ export class AdminController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('ip-reputation/ban')
+  async banIpBody(@Body() body: { ip: string }) {
+    return this.adminService.setIpBanStatus(body?.ip, true);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('ip-reputation/unban')
+  async unbanIpBody(@Body() body: { ip: string }) {
+    return this.adminService.setIpBanStatus(body?.ip, false);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('ip-reputation/delete')
+  async deleteIpBody(@Body() body: { ip: string }) {
+    return this.adminService.deleteIpReputation(body?.ip);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Post('ip-reputation/:ip/ban')
   async banIp(@Param('ip') ip: string) {
     return this.adminService.setIpBanStatus(ip, true);

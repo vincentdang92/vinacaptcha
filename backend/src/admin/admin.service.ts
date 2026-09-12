@@ -963,6 +963,16 @@ export class AdminService {
         )
       `, [cleanIp]);
 
+      await this.dataSource.query(`
+        DELETE FROM ip_reputation_sightings 
+        WHERE ip_cidr = (
+          CASE 
+            WHEN $1 ~ '/' THEN $1::cidr 
+            ELSE set_masklen($1::inet, 32)::cidr 
+          END
+        )
+      `, [cleanIp]).catch(() => {});
+
       return { success: true, ip: cleanIp, message: `Đã xóa IP ${cleanIp} khỏi danh sách theo dõi` };
     } catch (err: any) {
       throw new BadRequestException(`Lỗi khi xóa IP ${cleanIp}: ${err.message}`);
