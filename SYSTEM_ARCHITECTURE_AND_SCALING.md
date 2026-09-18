@@ -1,5 +1,5 @@
 # HỆ THỐNG BẢO VỆ CAPTCHA NỘI BỘ (VINACAPTCHA / NHANHOACAPTCHA)
-## TÀI LIỆU BÀN GIAO: KIẾN TRÚC HỆ THỐNG & TRIỂN KHAI MỞ RỘNG (SCALING PLAYBOOK)
+## TÀI LIỆU BÀN GIAO: KIẾN TRÚC HỆ THỐNG & SỔ TAY VẬN HÀNH DOCKER / DEVOPS
 
 ---
 
@@ -80,7 +80,7 @@ Toàn bộ các endpoint chịu tải chính (`/v1/issue`, `/v1/verify`, `/v1/si
 ### 2.2 Đẩy Tác Vụ Nặng Về Trình Duyệt (Zero-Server Rendering)
 - **Slider Captcha Puzzle**: Ảnh nền và mảnh ghép puzzle bị khuyết được **vẽ trực tiếp bằng HTML5 Canvas trên trình duyệt client** dựa theo mã seed ngẫu nhiên.
   - Server chỉ gửi seed và tọa độ Y (< 1 byte).
-  - Server không tốn CPU để nén JPEG, crop ảnh hay decode base64 $\rightarrow$ **Giảm 95% áp lực CPU cho Server**.
+  - Server không tốn CPU để nén JPEG, crop ảnh hay decode base64 -> **Giảm 95% áp lực CPU cho Server**.
 - **Proof-of-Work (PoW)**: Khi phát hiện tấn công DDoS, thuật toán băm SHA-256 chạy trên Web Worker của client. Server chỉ mất < 0.01ms để kiểm tra lại chữ ký cuối.
 
 ### 2.3 Cơ Chế Dự Phòng Chống Sập (Fail-Open Fallback & Circuit Breaker)
@@ -93,20 +93,21 @@ Toàn bộ các endpoint chịu tải chính (`/v1/issue`, `/v1/verify`, `/v1/si
 
 ### 3.1 Bảng phân bổ tài nguyên trên VPS mẫu (3 vCPU – 3 GB RAM)
 
-| Thành phần | RAM Phân bổ | CPU Tải cao | Đặc tính kỹ thuật |
-| :--- | :--- | :--- | :--- |
-| **Hệ điều hành Linux** | ~350 MB | < 2% | Kernel, systemd, SSH, firewall |
-| **Redis 7 (In-Memory)** | ~450 MB | 5% – 10% | Maxmemory LRU, lưu token và rate-limit |
-| **PostgreSQL 16** | ~650 MB | 10% – 20% | `shared_buffers = 512MB`, lưu meta & logs |
-| **Backend Fastify (3 Workers)** | ~700 MB | 60% – 75% | NestJS Fastify cluster, xử lý tính toán rủi ro |
-| **Nginx Web Server** | ~100 MB | 5% – 10% | SSL Termination, gzip, connection pool |
-| **Tổng sử dụng** | **~2.2 GB / 3 GB** | **Bộ đệm an toàn: ~800MB RAM tránh tràn bộ nhớ (OOM)** |
+| Thành phần | Container Name | RAM Phân bổ | CPU Tải cao | Đặc tính kỹ thuật |
+| :--- | :--- | :--- | :--- | :--- |
+| **Linux OS & Docker Daemon** | Host | ~350 MB | < 2% | Kernel, containerd, firewall |
+| **Redis 7 (In-Memory)** | `captcha_redis` | ~450 MB | 5% – 10% | Maxmemory LRU, lưu token và rate-limit |
+| **PostgreSQL 16** | `captcha_postgres` | ~650 MB | 10% – 20% | `shared_buffers = 512MB`, lưu meta & logs |
+| **Backend Fastify (3 Workers)** | `captcha_backend` | ~700 MB | 60% – 75% | NestJS Fastify, xử lý tính toán rủi ro |
+| **Gateway (Nginx Proxy)** | `captcha_gateway` | ~100 MB | 5% – 10% | SSL Termination, gzip, connection pool |
+| **Admin Dashboard** | `captcha_dashboard`| ~50 MB | < 1% | Nginx static SPA serving |
+| **Tổng sử dụng** | | **~2.3 GB / 3 GB** | **Bộ đệm an toàn: ~700MB RAM tránh tràn bộ nhớ (OOM)** |
 
 ### 3.2 Chỉ số năng lực xử lý (Throughput Benchmarks)
 
 | Chỉ số hiệu năng | Mức thông thường | Mức cao điểm (Peak / Flash Sale) |
 | :--- | :--- | :--- |
-| **Thông lượng (Throughput)** | **1.500 – 2.500 RPS** | **3.500 – 5.000 RPS** *(3 Worker PM2)* |
+| **Thông lượng (Throughput)** | **1.500 – 2.500 RPS** | **3.500 – 5.000 RPS** *(Chạy Docker Scale / PM2)* |
 | **Lượt xác thực / ngày** | **~30 – 50 triệu reqs** | **~100 triệu reqs / ngày** |
 | **Người dùng đồng thời (CCU)** | **8.000 – 15.000 CCU** | **25.000 – 40.000 CCU** |
 | **Độ trễ API (Latency)** | **1.5 ms – 5 ms** | **10 ms – 30 ms** |
@@ -132,86 +133,11 @@ Nhờ kiến trúc **Stateless**, việc mở rộng quy mô hệ thống có th
                     [ REDIS CLUSTER ]       [ POSTGRESQL DB ]
 ```
 
----
-
-### 🔹 Cấp độ 1: Mở rộng nội bộ trên 1 VPS (PM2 Cluster Mode) — 10 Giây
-Tự động nhân bản tiến trình theo số lõi CPU của máy:
-
+### 🔹 Mở rộng ngang bằng Docker Compose:
 ```bash
-# Cài đặt PM2 toàn cục
-npm install -g pm2
-
-# Build source code mới nhất
-cd /var/www/vina-captcha/backend
-npm run build
-
-# Khởi chạy Cluster tối đa các core CPU
-pm2 start dist/main.js -i max --name "vina-captcha-api" --max-memory-restart 400M
-
-# Lưu trạng thái tự khởi động cùng OS
-pm2 save
-pm2 startup
+# Nhân bản lên 4 container backend xử lý song song
+docker compose up -d --scale backend=4 --no-recreate
 ```
-👉 *Khi nâng cấp gói VPS từ 3 CPU lên 6 CPU hoặc 12 CPU, chỉ cần gõ `pm2 reload all` để nhận thêm core mà không downtime.*
-
----
-
-### 🔹 Cấp độ 2: Nhân bản với Docker Compose — 30 Giây
-Nếu triển khai bằng Docker Container:
-
-```bash
-# Nhân bản lên 4 instances backend xử lý song song
-docker compose up -d --scale backend=4
-
-# Kiểm tra danh sách container đang chạy
-docker compose ps
-```
-👉 *Nginx tích hợp sẵn trong compose sẽ tự động cân bằng tải (Round Robin) tới 4 container backend.*
-
----
-
-### 🔹 Cấp độ 3: Mở rộng cụm nhiều VPS (Multi-Server Horizontal Scaling) — 5 Phút
-Khi lượng request vượt quá **15.000 RPS**:
-
-1. **Máy chủ 1 (Master)**: Chạy PostgreSQL, Redis và Nginx Load Balancer chính.
-2. **Máy chủ 2, 3, 4 (Worker Nodes)**: Chỉ chạy Backend API NestJS.
-3. **Cấu hình Worker**: Trong file `backend/.env` của các máy Worker, trỏ kết nối Redis và DB về IP Private của máy Master:
-   ```env
-   BACKEND_REDIS_URL=redis://:mat_khau_redis@10.0.0.1:6379/0
-   DATABASE_HOST=10.0.0.1
-   DATABASE_PORT=5432
-   ```
-4. **Cấu hình Nginx Upstream Load Balancing trên Master (`/etc/nginx/conf.d/upstream.conf`)**:
-   ```nginx
-   upstream backend_cluster {
-       least_conn; # Điều phối tới node có ít kết nối nhất
-       server 127.0.0.1:3068 max_fails=3 fail_timeout=10s;
-       server 10.0.0.2:3068 max_fails=3 fail_timeout=10s;
-       server 10.0.0.3:3068 max_fails=3 fail_timeout=10s;
-       keepalive 64;
-   }
-
-   server {
-       listen 80;
-       server_name captcha.yourdomain.com;
-
-       location / {
-           proxy_pass http://backend_cluster;
-           proxy_http_version 1.1;
-           proxy_set_header Connection "";
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-       }
-   }
-   ```
-
----
-
-### 🔹 Cấp độ 4: Tách biệt Dedicated Cluster cho Redis & Database — 10 Phút
-Khi đạt quy mô hàng trăm triệu lượt xác thực/tháng:
-- Đưa **Redis** sang cụm máy chủ RAM cao (VD: 8GB RAM, tắt RDB persistence để tối đa IOPS).
-- Đưa **PostgreSQL** sang cụm máy chủ lưu trữ SSD NVMe riêng biệt, cấu hình Read-Replicas nếu cần thống kê log chuyên sâu.
 
 ---
 
@@ -232,95 +158,202 @@ fs.file-max = 2097152
 ```
 *Áp dụng ngay: `sudo sysctl -p`*
 
-### 5.2 Tối ưu Redis (`/etc/redis/redis.conf`)
-```ini
-maxmemory 450mb
-maxmemory-policy allkeys-lru
-tcp-backlog 65535
-timeout 0
-tcp-keepalive 300
+### 5.2 Tối ưu Redis Container (`docker-compose.yml`)
+```yaml
+command: redis-server --appendonly yes --maxmemory 768mb --maxmemory-policy volatile-lru --tcp-backlog 65535 --timeout 0 --tcp-keepalive 300
 ```
 
-### 5.3 Tối ưu PostgreSQL 16 (`/etc/postgresql/16/main/postgresql.conf`)
-*(Dành riêng cho VPS 3GB RAM)*
-```ini
-shared_buffers = 512MB
-effective_cache_size = 1536MB
-work_mem = 16MB
-maintenance_work_mem = 64MB
-min_wal_size = 1GB
-max_wal_size = 4GB
-checkpoint_completion_target = 0.9
-wal_buffers = 16MB
-default_statistics_target = 100
-random_page_cost = 1.1
-effective_io_concurrency = 200
-max_connections = 100
-```
-
-### 5.4 Tối ưu Nginx High-Concurrency & Cache Client (`/etc/nginx/nginx.conf`)
-```nginx
-worker_processes auto;
-worker_rlimit_nofile 65535;
-
-events {
-    worker_connections 8192;
-    multi_accept on;
-    use epoll;
-}
-
-http {
-    keepalive_timeout 65;
-    keepalive_requests 10000;
-    
-    # Gzip nén dữ liệu API và Widget
-    gzip on;
-    gzip_comp_level 5;
-    gzip_min_length 256;
-    gzip_types application/javascript text/css application/json text/plain;
-
-    # Cache file widget phía client 30 ngày (Bảo vệ băng thông server)
-    location /widget/ {
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000, immutable";
-    }
-}
+### 5.3 Tối ưu PostgreSQL Container (`docker-compose.yml`)
+```yaml
+command: >
+  postgres
+  -c shared_buffers=512MB
+  -c effective_cache_size=1536MB
+  -c work_mem=16MB
+  -c maintenance_work_mem=128MB
+  -c min_wal_size=1GB
+  -c max_wal_size=4GB
+  -c checkpoint_completion_target=0.9
+  -c wal_buffers=16MB
+  -c default_statistics_target=100
+  -c random_page_cost=1.1
+  -c effective_io_concurrency=200
+  -c max_connections=200
 ```
 
 ---
 
-## 6. QUY TRÌNH VẬN HÀNH, GIÁM SÁT & BÀN GIAO
+## 6. SỔ TAY VẬN HÀNH DOCKER CHO TEAM HẠ TẦNG / DEVOPS
 
-### 6.1 Các lệnh quản trị dịch vụ chuẩn
+Hệ thống được đóng gói hoàn chỉnh bằng **Docker Compose** gồm 5 dịch vụ chính:
+- `captcha_gateway`: Nginx Reverse Proxy & SSL Gateway (Port 80/443)
+- `captcha_backend`: NestJS Fastify API Core (Port 3000 nội bộ)
+- `captcha_dashboard`: Refine React 19 Dashboard UI (Nginx SPA)
+- `captcha_postgres`: PostgreSQL 15/16 Database (Port 5432)
+- `captcha_redis`: Redis 7 In-Memory Token Store (Port 6379)
+
+---
+
+### 6.1 Quản Lý Vòng Đời Dịch Vụ (Start, Stop, Restart)
+
 ```bash
-# 1. Kiểm tra trạng thái các tiến trình API
-pm2 status
+# Di chuyển vào thư mục dự án
+cd /var/www/vina-captcha   # hoặc đường dẫn chứa docker-compose.yml
 
-# 2. Xem log thời gian thực theo dòng
-pm2 logs vina-captcha-api --lines 100
+# 1. Khởi chạy toàn bộ hệ thống dưới nền (Detached mode)
+docker compose up -d
 
-# 3. Khởi động lại không downtime (Graceful Reload)
-pm2 reload vina-captcha-api
+# 2. Xem trạng thái và Healthcheck của tất cả container
+docker compose ps
 
-# 4. Kiểm tra Redis
-redis-cli ping                # Trả về PONG
-redis-cli info memory        # Xem dung lượng RAM Redis đang dùng
+# 3. Dừng toàn bộ hệ thống (Giữ nguyên dữ liệu Database và Redis)
+docker compose down
 
-# 5. Kiểm tra kết nối PostgreSQL
-sudo -u postgres psql -d vinacaptcha_db -c "SELECT count(*) FROM sites;"
+# 4. Khởi động lại riêng 1 dịch vụ (Ví dụ: Backend hoặc Nginx Gateway)
+docker compose restart backend
+docker compose restart gateway
+
+# 5. Dừng và khởi động lại toàn bộ stack
+docker compose restart
 ```
 
-### 6.2 Kịch bản Sao Lưu Dữ Liệu Tự Động (Daily Backup)
-Tạo cronjob sao lưu PostgreSQL hàng ngày vào lúc 02:00 sáng (`crontab -e`):
+---
+
+### 6.2 Quy Trình Triển Khai / Cập Nhật Code Mới (Deployment & CI/CD)
+
+Khi có bản cập nhật mới trên GitHub (sửa bug, tính năng mới):
+
 ```bash
-0 2 * * * pg_dump -U postgres vinacaptcha_db | gzip > /var/backups/vinacaptcha_$(date +\%Y\%m\%d).sql.gz
+# Bước 1: Kéo mã nguồn mới nhất về máy chủ
+git pull origin main
+
+# Bước 2: Build lại widget và đóng gói static asset
+cd widget && npm run build && cd ..
+
+# Bước 3: Rebuild Docker images không dùng cache cũ
+docker compose build --no-cache backend dashboard
+
+# Bước 4: Khởi chạy lại các container với image mới (Zero Downtime)
+docker compose up -d --remove-orphans
+
+# Bước 5: Dọn dẹp các dangling images cũ giải phóng dung lượng đĩa
+docker image prune -f
 ```
 
-### 6.3 Danh Mục Kiểm Tra Sức Khỏe Định Kỳ (Health Checklist)
-- [ ] RAM tiêu thụ ổn định < 85% tổng dung lượng VPS.
+---
+
+### 6.3 Giám Sát Tài Nguyên & Xem Live Logs (Monitoring & Debugging)
+
+```bash
+# 1. Theo dõi mức tiêu thụ CPU, RAM, Network I/O thời gian thực của từng container
+docker stats --no-trunc
+
+# 2. Xem log thời gian thực của Backend API (kèm timestamp)
+docker compose logs -f backend --tail=100 -t
+
+# 3. Xem log truy cập và lỗi của Nginx Gateway
+docker compose logs -f gateway --tail=100
+
+# 4. Xem log của Database PostgreSQL
+docker compose logs -f postgres --tail=50
+
+# 5. Xem log của Redis
+docker compose logs -f redis --tail=50
+```
+
+---
+
+### 6.4 Thao Tác Trực Tiếp Vào Container (CLI & Database Inspection)
+
+```bash
+# 1. Mở CLI PostgreSQL trực tiếp
+docker exec -it captcha_postgres psql -U captcha_user -d captcha_db
+
+# 2. Một số câu lệnh SQL hữu ích kiểm tra hệ thống:
+# - Xem tổng số site đang hoạt động:
+#   SELECT id, name, primary_domain, challenge_mode, status FROM sites;
+# - Xem thống kê log xác thực 10 lượt gần nhất:
+#   SELECT ip, action, risk_level, score, created_at FROM verification_logs ORDER BY created_at DESC LIMIT 10;
+# - Xem các IP đang bị Cấm (Banned):
+#   SELECT ip_cidr, fail_count, site_count_seen, last_seen_at FROM ip_reputation WHERE fail_count > 10;
+
+# 3. Mở Redis CLI kiểm tra RAM và khóa:
+docker exec -it captcha_redis redis-cli
+
+# - Kiểm tra kết nối: ping (trả về PONG)
+# - Xem tổng số keys: dbsize
+# - Xem mức RAM tiêu thụ: info memory
+# - Xem các khóa session đang chờ giải captcha: keys "session:*"
+# - Xem các token đã cấp chờ verify: keys "verify_token:*"
+
+# 4. Truy cập shell bên trong container Backend (để debug)
+docker exec -it captcha_backend sh
+```
+
+---
+
+### 6.5 Sao Lưu & Khôi Phục Database (Backup & Restore)
+
+#### A. Tạo bản sao lưu ngay lập tức (Manual Dump):
+```bash
+# Tạo thư mục chứa backup nếu chưa có
+mkdir -p /var/backups/captcha
+
+# Dump dữ liệu PostgreSQL nén gzip
+docker exec -t captcha_postgres pg_dump -U captcha_user captcha_db | gzip > /var/backups/captcha/vinacaptcha_$(date +%Y%m%d_%H%M%S).sql.gz
+
+# Kiểm tra file đã tạo
+ls -lh /var/backups/captcha/
+```
+
+#### B. Khôi phục dữ liệu từ file Backup (Restore):
+```bash
+# Giải nén và restore thẳng vào container PostgreSQL
+gunzip < /var/backups/captcha/vinacaptcha_20260918_093000.sql.gz | docker exec -i captcha_postgres psql -U captcha_user -d captcha_db
+```
+
+#### C. Thiết lập Tự Động Sao Lưu Hàng Ngày (Crontab Host):
+Mở crontab trên máy chủ host (`crontab -e`) và dán dòng sau (chạy lúc 02:30 sáng hàng ngày):
+```cron
+30 2 * * * docker exec -t captcha_postgres pg_dump -U captcha_user captcha_db | gzip > /var/backups/captcha/vinacaptcha_$(date +\%Y\%m\%d).sql.gz && find /var/backups/captcha -type f -name "*.sql.gz" -mtime +30 -delete
+```
+*(Tự động dọn dẹp các bản backup cũ quá 30 ngày).*
+
+---
+
+### 6.6 Quản Lý Chứng Chỉ SSL Let's Encrypt Trên Gateway
+
+```bash
+# 1. Cấp mới / Gia hạn SSL tự động bằng script có sẵn
+./ssl.sh yourdomain.com
+
+# 2. Hoặc chạy Certbot gia hạn SSL thủ công
+sudo certbot certonly --webroot -w /var/www/certbot -d yourdomain.com --dry-run
+
+# 3. Reload Nginx Gateway để nhận chứng chỉ mới mà không gián đoạn
+docker compose exec gateway nginx -s reload
+```
+
+---
+
+### 6.7 Xử Lý Sự Cố Khẩn Cấp (Emergency Troubleshooting)
+
+| Hiện tượng | Nguyên nhân | Lệnh xử lý nhanh |
+| :--- | :--- | :--- |
+| **Backend trả về 502 Bad Gateway** | Container `captcha_backend` bị crash hoặc đang khởi động lại | `docker compose logs --tail=50 backend` <br> `docker compose restart backend` |
+| **Redis báo lỗi OOM (Out Of Memory)** | RAM vượt quá `maxmemory` do lưu quá nhiều session | `docker exec -it captcha_redis redis-cli FLUSHDB` <br> Sau đó kiểm tra lại cấu hình LRU |
+| **PostgreSQL báo `too many connections`** | Connection pool vượt ngưỡng 200 | `docker compose restart backend` <br> `docker exec -it captcha_postgres psql -U captcha_user -d captcha_db -c "SELECT count(*) FROM pg_stat_activity;"` |
+| **Dung lượng ổ cứng VPS bị đầy** | Docker tích lũy log file và images cũ | `docker system prune -af` <br> `truncate -s 0 /var/lib/docker/containers/*/*-json.log` |
+| **Domain mới nhúng bị lỗi CORS / 403** | Domain chưa được thêm vào Whitelist | Vào Dashboard -> Quản lý Sites -> Thêm domain vào **Allowed Domains** |
+
+---
+
+### 6.8 Danh Mục Kiểm Tra Sức Khỏe Định Kỳ (DevOps Checklist)
+- [ ] Lệnh `docker compose ps` hiển thị tất cả 5 containers đều ở trạng thái `Up (healthy)`.
+- [ ] RAM tiêu thụ tổng thể của host < 80% (theo dõi qua `free -m` và `docker stats`).
 - [ ] API Hot-Path `/v1/siteverify` phản hồi < 10ms.
-- [ ] Bảng `verification_logs` được dọn dẹp định kỳ bởi Cron Job (lưu trữ 30 - 90 ngày).
-- [ ] Bảng `threat_intel_ranges` được đồng bộ tự động hàng tuần từ các nguồn Cloud/Tor/Spamhaus.
+- [ ] Dung lượng đĩa trống trên host > 20%.
+- [ ] File backup hàng ngày `/var/backups/captcha/` được sinh đều đặn mỗi đêm.
 
 ---
-**Tài liệu được đóng gói và bàn giao hoàn tất cho đội ngũ Vận hành & Phát triển.**
+**Tài liệu Sổ tay Vận hành Docker được chuẩn hóa và bàn giao đầy đủ cho Team Hạ tầng & DevOps.**
