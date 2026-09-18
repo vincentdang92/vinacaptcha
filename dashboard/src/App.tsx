@@ -15,6 +15,8 @@ import axios from 'axios';
 import { authProvider } from './authProvider';
 import { LoginPage } from './pages/login';
 import { RegisterPage } from './pages/register';
+import { ForgotPasswordPage } from './pages/forgot-password';
+import { ResetPasswordPage } from './pages/reset-password';
 import { DashboardPage } from './pages/dashboard';
 import { SiteList } from './pages/sites/list';
 import { ThreatIntelPage } from './pages/threat-intel';
@@ -153,6 +155,8 @@ function App() {
                 <Route path="/setup" element={<SetupWizardPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
 
                 {/* PROTECTED ROUTES */}
                 <Route

@@ -1,5 +1,5 @@
 export interface SliderCaptchaOptions {
-  action: 'login' | 'register';
+  action: 'login' | 'register' | 'forgot_password' | 'reset_password';
   siteKey?: string;
   baseUrl?: string;
 }
@@ -8,7 +8,9 @@ export interface SliderCaptchaOptions {
  * Trigger slider captcha challenge programmatically.
  * Resolves with the verify_token upon successful completion.
  */
-export const executeSliderCaptcha = async (action: 'login' | 'register' = 'login'): Promise<string> => {
+export const executeSliderCaptcha = async (
+  action: 'login' | 'register' | 'forgot_password' | 'reset_password' = 'login',
+): Promise<string> => {
   const siteKey = (import.meta as any).env?.VITE_CAPTCHA_SITE_KEY || '5ae2b566-de1b-4ce2-947a-6f9645eb1004';
   
   // Wait if document/window is still loading the script

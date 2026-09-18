@@ -507,6 +507,63 @@ export class AdminService {
     return { success: true, message: 'Tài khoản đã được kích hoạt thành công.' };
   }
 
+  async forgotPassword(email: string, requestBaseUrl?: string, captchaToken?: string) {
+    await this.verifyAuthCaptcha(captchaToken);
+
+    const cleanEmail = email?.trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new BadRequestException('Email là bắt buộc');
+    }
+
+    const acc = await this.accountsRepo.findOneBy({ email: cleanEmail });
+    if (acc && acc.status === 'active') {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      // TTL 15 phút (900s), lưu trữ one-time token vào Redis
+      await this.redisService.setOneTimeToken(`pwd_reset:${resetToken}`, 900, acc.id);
+
+      // Gửi email đặt lại mật khẩu
+      await this.mailService.sendPasswordResetEmail(acc.email, acc.name, resetToken, requestBaseUrl);
+    }
+
+    // Luôn trả về thông báo chung để ngăn chặn dò quét email (email enumeration attack)
+    return {
+      success: true,
+      message: 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến hòm thư của bạn.',
+    };
+  }
+
+  async resetPassword(token: string, password: string, captchaToken?: string) {
+    await this.verifyAuthCaptcha(captchaToken);
+
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      throw new BadRequestException('Thiếu mã xác thực đặt lại mật khẩu');
+    }
+
+    if (!password || typeof password !== 'string' || password.trim().length < 6) {
+      throw new BadRequestException('Mật khẩu mới phải có ít nhất 6 ký tự');
+    }
+
+    const cleanToken = token.trim();
+    // Tiêu thụ one-time token từ Redis
+    const accountId = await this.redisService.useOneTimeToken(`pwd_reset:${cleanToken}`);
+    if (!accountId) {
+      throw new BadRequestException('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Vui lòng gửi lại yêu cầu.');
+    }
+
+    const acc = await this.accountsRepo.findOneBy({ id: accountId });
+    if (!acc) {
+      throw new BadRequestException('Tài khoản không tồn tại.');
+    }
+
+    acc.password_hash = this.hashPassword(password);
+    await this.accountsRepo.save(acc);
+
+    return {
+      success: true,
+      message: 'Mật khẩu của bạn đã được cập nhật thành công. Vui lòng đăng nhập với mật khẩu mới.',
+    };
+  }
+
   async login(email: string, password: string, captchaToken?: string) {
     await this.verifyAuthCaptcha(captchaToken);
 

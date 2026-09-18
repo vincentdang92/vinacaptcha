@@ -170,7 +170,7 @@ export const LoginPage = () => {
             <input type="checkbox" style={{ width: 16, height: 16, accentColor: token.colorPrimary }} />
             <Text type="secondary">Keep me logged in</Text>
           </label>
-          <a href="#" style={{ color: token.colorPrimary, textDecoration: "none" }}>Forgot password?</a>
+          <Link to="/forgot-password" style={{ color: token.colorPrimary, textDecoration: "none" }}>Forgot password?</Link>
         </div>
 
         <Form.Item>

@@ -500,4 +500,96 @@ export class MailService implements OnModuleInit {
       return { success: false, error: err.message || 'send_failed' };
     }
   }
+
+  /**
+   * Gửi email hướng dẫn đặt lại mật khẩu người dùng
+   */
+  async sendPasswordResetEmail(
+    email: string,
+    name: string,
+    token: string,
+    requestBaseUrl?: string,
+  ): Promise<SendMailResult> {
+    const config = this.getEffectiveConfig();
+    const isConfigured = Boolean(config.host && (config.user ? config.pass : true));
+
+    if (!isConfigured) {
+      this.logger.warn(`[MailService] Bỏ qua gửi email đặt lại mật khẩu cho ${email} vì chưa cấu hình SMTP.`);
+      return { success: false, error: 'smtp_not_configured' };
+    }
+
+    try {
+      const transporter = this.createTransporter();
+
+      let appUrl = requestBaseUrl;
+      if (!appUrl || appUrl.includes('localhost')) {
+        if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
+          appUrl = process.env.APP_URL;
+        } else if (process.env.DASHBOARD_URL && !process.env.DASHBOARD_URL.includes('localhost')) {
+          appUrl = process.env.DASHBOARD_URL;
+        } else {
+          appUrl = requestBaseUrl || process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
+        }
+      }
+
+      appUrl = appUrl.replace(/\/+$/, '');
+      const resetLink = `${appUrl}/reset-password?token=${token}`;
+
+      const fromName = config.from_name;
+      const fromEmail = config.from_email;
+
+      const info = await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: email,
+        subject: '[NhanHoaCaptcha] Yêu cầu đặt lại mật khẩu tài khoản',
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px; background: #ffffff;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+              <span style="font-size: 26px;">🛡️</span>
+              <h2 style="color: #2563eb; margin: 0; font-size: 22px;">NhanHoaCaptcha</h2>
+            </div>
+            
+            <p style="color: #334155; font-size: 15px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+              Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn tại hệ thống <strong>NhanHoaCaptcha</strong>.
+            </p>
+            
+            <p style="color: #334155; font-size: 14px; line-height: 1.6;">
+              Vui lòng bấm vào nút bên dưới để tiến hành thiết lập mật khẩu mới:
+            </p>
+
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${resetLink}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; font-weight: 600; font-size: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
+                Đặt Lại Mật Khẩu →
+              </a>
+            </div>
+
+            <div style="background-color: #fef2f2; border-radius: 8px; padding: 12px 16px; margin: 24px 0; border-left: 4px solid #ef4444;">
+              <p style="margin: 0; font-size: 13px; color: #991b1b;">
+                ⏱️ <strong>Lưu ý bảo mật:</strong> Liên kết này chỉ có hiệu lực trong vòng <strong>15 phút</strong> và chỉ sử dụng được <strong>1 lần duy nhất</strong>.
+              </p>
+            </div>
+
+            <p style="color: #64748b; font-size: 12px; line-height: 1.5;">
+              Nếu nút trên không bấm được, bạn có thể sao chép liên kết sau dán vào trình duyệt:<br/>
+              <a href="${resetLink}" style="color: #2563eb; word-break: break-all;">${resetLink}</a>
+            </p>
+
+            <p style="color: #94a3b8; font-size: 12px; line-height: 1.5; margin-top: 16px;">
+              Nếu bạn không yêu cầu đặt lại mật khẩu, xin vui lòng bỏ qua email này hoặc liên hệ quản trị viên nếu thấy nghi ngờ.
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;" />
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">Trân trọng,<br/>Đội ngũ Kỹ thuật NhanHoaCaptcha</p>
+          </div>
+        `,
+      });
+
+      this.logger.log(`📧 [MailService] Đã gửi email đặt lại mật khẩu tới ${email} (MessageId: ${info.messageId})`);
+      return { success: true, messageId: info.messageId };
+    } catch (err: any) {
+      this.logger.error(`❌ [MailService] Lỗi khi gửi email đặt lại mật khẩu tới ${email}:`, err);
+      return { success: false, error: err.message || 'send_failed' };
+    }
+  }
 }

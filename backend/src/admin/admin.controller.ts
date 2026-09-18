@@ -61,6 +61,26 @@ export class AdminController {
     return res.redirect(redirectUrl);
   }
 
+  @Post('auth/forgot-password')
+  async forgotPassword(@Body() body: any, @Req() req: any) {
+    if (!body?.email) {
+      throw new BadRequestException('Email là bắt buộc');
+    }
+    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers['host'];
+    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+
+    return this.adminService.forgotPassword(body.email, requestBaseUrl, body.captcha_token);
+  }
+
+  @Post('auth/reset-password')
+  async resetPassword(@Body() body: any) {
+    if (!body?.token || !body?.password) {
+      throw new BadRequestException('Token và mật khẩu mới là bắt buộc');
+    }
+    return this.adminService.resetPassword(body.token, body.password, body.captcha_token);
+  }
+
   // ─── Endpoint bảo vệ bằng JWT (tất cả endpoint còn lại) ───────────────────
 
   @UseGuards(JwtAuthGuard)
