@@ -105,6 +105,32 @@ export class AdminController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('verification-logs')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+  async getVerificationLogs(
+    @Req() req: any,
+    @Query('ip') ip?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('result') result?: string,
+    @Query('siteId') siteId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getVerificationLogs(
+      { ip, startDate, endDate, result, siteId, page, limit },
+      req.account?.id,
+      req.account?.role,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('ip-intelligence/:ip')
+  async getIpIntelligence(@Req() req: any, @Param('ip') ip: string) {
+    return this.adminService.getIpIntelligence(ip, req.account?.id, req.account?.role);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('sites')
   async getSites(
     @Req() req: any,

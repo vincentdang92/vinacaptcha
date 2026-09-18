@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS verification_logs_2026_12 PARTITION OF verification_l
 
 CREATE INDEX IF NOT EXISTS idx_verification_logs_site_created ON verification_logs(site_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_verification_logs_ip ON verification_logs(ip);
+CREATE INDEX IF NOT EXISTS idx_verification_logs_ip_created ON verification_logs(ip, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_verification_logs_site_ip_created ON verification_logs(site_id, ip, created_at DESC);
 
 -- 7. IP REPUTATION
 CREATE TABLE IF NOT EXISTS ip_reputation (

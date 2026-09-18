@@ -42,6 +42,10 @@ describe('AdminService', () => {
       mockTokens.delete(key);
       return Promise.resolve(val);
     },
+    getClient: () => ({
+      get: (_k: string) => Promise.resolve(null),
+      setex: (_k: string, _t: number, _v: string) => Promise.resolve('OK'),
+    }),
   };
 
   const mockMailService = {
@@ -196,6 +200,93 @@ describe('AdminService', () => {
       mockRepo.findOneBy = () => Promise.resolve(updated);
       const loginRes = await service.login('admin@domain.com', 'NewSecurePassword456!');
       expect(loginRes).toHaveProperty('access_token');
+    });
+  });
+
+  describe('getVerificationLogs', () => {
+    it('should query verification logs with pagination and compute ipSummary', async () => {
+      mockDataSource.query = (q: string) => {
+        if (q.includes('SELECT \n        vl.id')) {
+          return Promise.resolve([
+            {
+              id: '1',
+              ip: '113.190.234.12',
+              challenge_type: 'slider',
+              result: 'pass',
+              risk_score: '10.0',
+              created_at: new Date().toISOString(),
+              site_domain: 'example.com',
+            },
+          ]);
+        }
+        if (q.includes('SELECT \n        COUNT(*) as total')) {
+          return Promise.resolve([
+            {
+              total: '1',
+              pass_count: '1',
+              fail_count: '0',
+              avg_risk_score: '10.0',
+              first_seen: new Date().toISOString(),
+              last_seen: new Date().toISOString(),
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      };
+
+      const res = await service.getVerificationLogs({ ip: '113.190.234.12', page: 1, limit: 20 });
+      expect(res.data.length).toBe(1);
+      expect(res.total).toBe(1);
+      expect(res.ipSummary).not.toBeNull();
+      expect(res.ipSummary?.ip).toBe('113.190.234.12');
+      expect(res.ipSummary?.passCount).toBe(1);
+    });
+  });
+
+  describe('getIpIntelligence', () => {
+    it('should return local network classification for localhost IP', async () => {
+      const intel = await service.getIpIntelligence('127.0.0.1');
+      expect(intel.ip).toBe('127.0.0.1');
+      expect(intel.is_private).toBe(true);
+      expect(intel.geo.city).toBe('Localhost');
+    });
+
+    it('should return intelligence structure for public IP', async () => {
+      mockDataSource.query = (q: string) => {
+        if (q.includes('threat_intel_ranges')) {
+          return Promise.resolve([]);
+        }
+        if (q.includes('ip_reputation')) {
+          return Promise.resolve([
+            {
+              fail_count: 2,
+              site_count_seen: 1,
+              first_seen_at: new Date().toISOString(),
+              last_seen_at: new Date().toISOString(),
+            },
+          ]);
+        }
+        if (q.includes('verification_logs')) {
+          return Promise.resolve([
+            {
+              total: '5',
+              pass_count: '4',
+              fail_count: '1',
+              avg_risk_score: '18.0',
+              first_seen: new Date().toISOString(),
+              last_seen: new Date().toISOString(),
+              sites: ['demo.vn'],
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      };
+
+      const intel = await service.getIpIntelligence('113.190.234.12');
+      expect(intel.ip).toBe('113.190.234.12');
+      expect(intel.is_private).toBe(false);
+      expect(intel.reputation.fail_count).toBe(2);
+      expect(intel.verification_stats.total_requests).toBe(5);
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Optional, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Site } from './entities/site.entity.js';
@@ -11,7 +11,7 @@ import { VerifyService } from '../verify/verify.service.js';
 import * as crypto from 'crypto';
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
   constructor(
     @InjectRepository(Site) private sitesRepo: Repository<Site>,
     @InjectRepository(ApiKey) private apiKeysRepo: Repository<ApiKey>,
@@ -22,6 +22,19 @@ export class AdminService {
     private mailService: MailService,
     @Optional() private verifyService?: VerifyService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureIndexes();
+  }
+
+  private async ensureIndexes() {
+    try {
+      await this.dataSource.query(`
+        CREATE INDEX IF NOT EXISTS idx_verification_logs_ip_created ON verification_logs(ip, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_verification_logs_site_ip_created ON verification_logs(site_id, ip, created_at DESC);
+      `);
+    } catch {}
+  }
 
   private hashPassword(password: string): string {
     const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
@@ -279,6 +292,324 @@ export class AdminService {
     await this.redisService.setDashboardStatsCache(result, 300);
 
     return result;
+  }
+
+  // ─── TRUY VẤN LỊCH SỬ VERIFY THEO IP & THỜI GIAN (TỐI ƯU HIỆU NĂNG) ────────
+
+  async getVerificationLogs(
+    params: {
+      ip?: string;
+      startDate?: string;
+      endDate?: string;
+      result?: string;
+      siteId?: string;
+      page?: number | string;
+      limit?: number | string;
+    },
+    accountId?: string,
+    role?: string,
+  ) {
+    const pageNum = Math.max(1, parseInt(String(params.page || 1), 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(String(params.limit || 20), 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    const whereConditions: string[] = ['1=1'];
+    const queryParams: any[] = [];
+    let pIdx = 1;
+
+    // 1. Phân quyền theo account
+    if (role !== 'admin' && accountId) {
+      whereConditions.push(`s.account_id = $${pIdx++}`);
+      queryParams.push(accountId);
+    }
+
+    // 2. Lọc theo siteId cụ thể
+    if (params.siteId && params.siteId.trim()) {
+      whereConditions.push(`vl.site_id = $${pIdx++}`);
+      queryParams.push(params.siteId.trim());
+    }
+
+    // 3. Lọc theo IP (tận dụng B-Tree Index trên ip)
+    const cleanIp = params.ip?.trim();
+    if (cleanIp) {
+      if (/^[0-9a-fA-F:.]+$/.test(cleanIp) && !cleanIp.includes('%')) {
+        whereConditions.push(`(vl.ip = $${pIdx++}::inet OR vl.ip::text ILIKE $${pIdx++})`);
+        queryParams.push(cleanIp, `${cleanIp}%`);
+      } else {
+        whereConditions.push(`vl.ip::text ILIKE $${pIdx++}`);
+        queryParams.push(`%${cleanIp}%`);
+      }
+    }
+
+    // 4. Lọc theo khoảng thời gian (kích hoạt Partition Pruning)
+    if (params.startDate && params.startDate.trim()) {
+      whereConditions.push(`vl.created_at >= $${pIdx++}`);
+      queryParams.push(new Date(params.startDate).toISOString());
+    }
+    if (params.endDate && params.endDate.trim()) {
+      whereConditions.push(`vl.created_at <= $${pIdx++}`);
+      queryParams.push(new Date(params.endDate).toISOString());
+    }
+
+    // 5. Lọc theo kết quả pass / fail
+    if (params.result && (params.result === 'pass' || params.result === 'fail')) {
+      whereConditions.push(`vl.result = $${pIdx++}`);
+      queryParams.push(params.result);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // Query 1: Lấy danh sách logs kèm site info (sử dụng Index Scan O(log N))
+    const listQuery = `
+      SELECT 
+        vl.id,
+        vl.ip,
+        vl.challenge_type,
+        vl.result,
+        vl.risk_score,
+        vl.risk_breakdown,
+        vl.created_at,
+        s.primary_domain AS site_domain
+      FROM verification_logs vl
+      LEFT JOIN sites s ON s.id = vl.site_id
+      WHERE ${whereClause}
+      ORDER BY vl.created_at DESC
+      LIMIT $${pIdx++} OFFSET $${pIdx++}
+    `;
+    const listParams = [...queryParams, limitNum, offset];
+
+    // Query 2: Single-pass aggregation cho tổng bản ghi & IP summary
+    const countQuery = `
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END) as pass_count,
+        SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END) as fail_count,
+        ROUND(AVG(COALESCE(vl.risk_score, 0)), 1) as avg_risk_score,
+        MIN(vl.created_at) as first_seen,
+        MAX(vl.created_at) as last_seen
+      FROM verification_logs vl
+      LEFT JOIN sites s ON s.id = vl.site_id
+      WHERE ${whereClause}
+    `;
+
+    const [rows, countRes] = await Promise.all([
+      this.dataSource.query(listQuery, listParams),
+      this.dataSource.query(countQuery, queryParams),
+    ]);
+
+    const total = parseInt(countRes[0]?.total || '0', 10);
+    const passCount = parseInt(countRes[0]?.pass_count || '0', 10);
+    const failCount = parseInt(countRes[0]?.fail_count || '0', 10);
+    const avgRiskScore = parseFloat(countRes[0]?.avg_risk_score) || 0;
+    const firstSeen = countRes[0]?.first_seen || null;
+    const lastSeen = countRes[0]?.last_seen || null;
+
+    let ipSummary = null;
+    if (cleanIp && total > 0) {
+      ipSummary = {
+        ip: cleanIp,
+        totalCount: total,
+        passCount,
+        failCount,
+        avgRiskScore,
+        firstSeen,
+        lastSeen,
+      };
+    }
+
+    return {
+      data: rows || [],
+      total,
+      page: pageNum,
+      limit: limitNum,
+      ipSummary,
+    };
+  }
+
+  // ─── TRA CỨU CHI TIẾT THÔNG TIN IP (IP INTELLIGENCE DETAIL) ─────────────────
+
+  async getIpIntelligence(ip: string, accountId?: string, role?: string) {
+    const cleanIp = (ip || '').trim();
+    if (!cleanIp) {
+      throw new BadRequestException('IP không hợp lệ');
+    }
+
+    const isPrivate = /^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|::1|localhost)/i.test(cleanIp);
+
+    // 1. Lấy thông tin GeoIP (từ Redis Cache hoặc Free API ip-api.com)
+    const cacheKey = `ip_intel:${cleanIp}`;
+    let geoData: any = null;
+
+    if (!isPrivate) {
+      try {
+        const cached = await this.redisService.getClient().get(cacheKey);
+        if (cached) {
+          geoData = JSON.parse(cached);
+        }
+      } catch {}
+
+      if (!geoData) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          const res = await fetch(
+            `http://ip-api.com/json/${cleanIp}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,mobile,proxy,hosting,query`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const json: any = await res.json();
+            if (json.status === 'success') {
+              geoData = {
+                country: json.country || 'Unknown',
+                countryCode: json.countryCode || '',
+                region: json.regionName || json.region || '',
+                city: json.city || '',
+                zip: json.zip || '',
+                lat: json.lat || 0,
+                lon: json.lon || 0,
+                timezone: json.timezone || '',
+                isp: json.isp || '',
+                org: json.org || '',
+                as: json.as || '',
+                is_mobile: Boolean(json.mobile),
+                is_proxy: Boolean(json.proxy),
+                is_hosting: Boolean(json.hosting),
+              };
+              // Cache 24 giờ (86400s)
+              await this.redisService.getClient().setex(cacheKey, 86400, JSON.stringify(geoData));
+            }
+          }
+        } catch {
+          geoData = {
+            country: 'Unknown',
+            countryCode: '',
+            region: '',
+            city: '',
+            isp: 'Không thể tra cứu Geolocation',
+            org: '',
+            as: '',
+            is_mobile: false,
+            is_proxy: false,
+            is_hosting: false,
+          };
+        }
+      }
+    } else {
+      geoData = {
+        country: 'Local Network',
+        countryCode: 'LAN',
+        region: 'Internal',
+        city: 'Localhost',
+        isp: 'Private / Localhost',
+        org: 'Internal Network',
+        as: 'Local Loopback',
+        is_mobile: false,
+        is_proxy: false,
+        is_hosting: false,
+      };
+    }
+
+    // 2. Tra cứu Threat Intel nội bộ (threat_intel_ranges)
+    let threatIntel: any = { is_matched: false, category: null, source: null, cidr: null };
+    if (!isPrivate) {
+      try {
+        const threatRows = await this.dataSource.query(
+          `SELECT source, category, cidr::text as cidr FROM threat_intel_ranges WHERE cidr >>= $1::inet LIMIT 1`,
+          [cleanIp]
+        );
+        if (threatRows && threatRows.length > 0) {
+          threatIntel = {
+            is_matched: true,
+            category: threatRows[0].category,
+            source: threatRows[0].source,
+            cidr: threatRows[0].cidr,
+          };
+        }
+      } catch {}
+    }
+
+    // 3. Tra cứu IP Reputation nội bộ (ip_reputation)
+    let reputation: any = {
+      is_banned: false,
+      fail_count: 0,
+      site_count_seen: 1,
+      first_seen_at: null,
+      last_seen_at: null,
+    };
+    try {
+      const repRows = await this.dataSource.query(
+        `SELECT fail_count, site_count_seen, first_seen_at, last_seen_at FROM ip_reputation WHERE ip_cidr >>= $1::inet LIMIT 1`,
+        [cleanIp]
+      );
+      if (repRows && repRows.length > 0) {
+        reputation = {
+          is_banned: repRows[0].fail_count > 10,
+          fail_count: repRows[0].fail_count || 0,
+          site_count_seen: repRows[0].site_count_seen || 1,
+          first_seen_at: repRows[0].first_seen_at,
+          last_seen_at: repRows[0].last_seen_at,
+        };
+      }
+    } catch {}
+
+    // 4. Thống kê thực tế từ verification_logs của IP này
+    let verificationStats: any = {
+      total_requests: 0,
+      pass_count: 0,
+      fail_count: 0,
+      avg_risk_score: 0,
+      first_seen: null,
+      last_seen: null,
+      visited_sites: [],
+    };
+    try {
+      const logWhere = ['vl.ip = $1::inet'];
+      const logParams: any[] = [cleanIp];
+      if (role !== 'admin' && accountId) {
+        logWhere.push('s.account_id = $2');
+        logParams.push(accountId);
+      }
+      const whereStr = logWhere.join(' AND ');
+
+      const statsRows = await this.dataSource.query(
+        `
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END) as pass_count,
+          SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END) as fail_count,
+          ROUND(AVG(COALESCE(vl.risk_score, 0)), 1) as avg_risk_score,
+          MIN(vl.created_at) as first_seen,
+          MAX(vl.created_at) as last_seen,
+          ARRAY_AGG(DISTINCT s.primary_domain) FILTER (WHERE s.primary_domain IS NOT NULL) as sites
+        FROM verification_logs vl
+        LEFT JOIN sites s ON s.id = vl.site_id
+        WHERE ${whereStr}
+        `,
+        logParams
+      );
+
+      if (statsRows && statsRows.length > 0) {
+        verificationStats = {
+          total_requests: parseInt(statsRows[0].total || '0', 10),
+          pass_count: parseInt(statsRows[0].pass_count || '0', 10),
+          fail_count: parseInt(statsRows[0].fail_count || '0', 10),
+          avg_risk_score: parseFloat(statsRows[0].avg_risk_score) || 0,
+          first_seen: statsRows[0].first_seen,
+          last_seen: statsRows[0].last_seen,
+          visited_sites: (statsRows[0].sites || []).filter(Boolean),
+        };
+      }
+    } catch {}
+
+    return {
+      ip: cleanIp,
+      is_private: isPrivate,
+      geo: geoData,
+      threat_intel: threatIntel,
+      reputation,
+      verification_stats: verificationStats,
+    };
   }
 
   // ─── KHỞI TẠO HỆ THỐNG DẠNG CMS WIZARD ──────────────────────────────────────

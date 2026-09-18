@@ -1,4 +1,4 @@
-import { Row, Col, Card, Typography, Table, Spin, Tag, Tooltip, Progress } from "antd";
+import { Row, Col, Card, Typography, Table, Spin, Tag, Tooltip, Progress, Input, DatePicker, Select, Button, Space, Alert } from "antd";
 import { 
   UserOutlined, 
   GlobalOutlined, 
@@ -7,11 +7,18 @@ import {
   CompassOutlined,
   MobileOutlined,
   LaptopOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  SearchOutlined,
+  ReloadOutlined,
+  ClearOutlined,
+  EyeOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import dayjs, { Dayjs } from "dayjs";
 import { API_BASE_URL } from "../../config";
+import { IpDetailDrawer } from "../../components/ip-detail-drawer";
 
 const { Title, Text } = Typography;
 
@@ -62,6 +69,65 @@ const defaultStats: StatsData = {
 export const DashboardPage = () => {
   const [stats, setStats] = useState<StatsData>(defaultStats);
   const [loading, setLoading] = useState(true);
+
+  // Verification Logs Filter & Detail State
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logLoading, setLogLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [searchIp, setSearchIp] = useState("");
+  const [debouncedIp, setDebouncedIp] = useState("");
+  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [resultFilter, setResultFilter] = useState<string>("all");
+  const [ipSummary, setIpSummary] = useState<any>(null);
+  const [selectedIpForDetail, setSelectedIpForDetail] = useState<string | null>(null);
+
+  // Debounce tìm kiếm IP 350ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedIp(searchIp.trim());
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchIp]);
+
+  // Fetch Verification Logs với bộ lọc tối ưu O(log N)
+  const fetchLogs = useCallback(() => {
+    setLogLoading(true);
+    const token = localStorage.getItem("vinacaptcha_token");
+    const params: any = {
+      page,
+      limit: pageSize,
+    };
+    if (debouncedIp) params.ip = debouncedIp;
+    if (resultFilter && resultFilter !== "all") params.result = resultFilter;
+    if (dateRange && dateRange[0] && dateRange[1]) {
+      params.startDate = dateRange[0].startOf("minute").toISOString();
+      params.endDate = dateRange[1].endOf("minute").toISOString();
+    }
+
+    axios
+      .get(`${API_BASE_URL}/verification-logs`, {
+        params,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      .then((res) => {
+        const data = res.data || {};
+        setLogs(Array.isArray(data.data) ? data.data : []);
+        setLogTotal(Number(data.total) || 0);
+        setIpSummary(data.ipSummary || null);
+        setLogLoading(false);
+      })
+      .catch((err) => {
+        console.error("[Dashboard] Lỗi tải logs:", err);
+        setLogLoading(false);
+      });
+  }, [page, pageSize, debouncedIp, dateRange, resultFilter]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   useEffect(() => {
     let isMounted = true;
@@ -157,7 +223,6 @@ export const DashboardPage = () => {
   ];
 
   const chartData = Array.isArray(stats?.chartData) ? stats.chartData : [];
-  const recentLogs = Array.isArray(stats?.recentLogs) ? stats.recentLogs : [];
 
   // Tính max cho chart
   const maxTotal = Math.max(
@@ -452,19 +517,161 @@ export const DashboardPage = () => {
         </Col>
       </Row>
 
-      {/* Row 4: Table Full Width */}
+      {/* Row 4: Table Full Width với Bộ Lọc IP & Thời Gian Tối Ưu */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>
           <Card
-            title={<Text style={{ fontWeight: 600 }}>Lịch Sử Verify Gần Nhất</Text>}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontWeight: 600 }}>Lịch Sử Verify Gần Nhất</Text>
+                {logTotal > 0 && (
+                  <Tag color="blue" style={{ fontSize: 11, borderRadius: 10, margin: 0 }}>
+                    {logTotal} logs
+                  </Tag>
+                )}
+              </div>
+            }
+            extra={
+              <Space wrap size={[8, 8]}>
+                {/* 1. Ô tìm kiếm IP */}
+                <Input
+                  placeholder="Lọc theo IP (VD: 113.190...)"
+                  prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                  allowClear
+                  value={searchIp}
+                  onChange={(e) => setSearchIp(e.target.value)}
+                  style={{ width: 220, borderRadius: 6 }}
+                />
+
+                {/* 2. Bộ chọn khoảng thời gian */}
+                <DatePicker.RangePicker
+                  showTime={{ format: 'HH:mm' }}
+                  format="DD/MM/YYYY HH:mm"
+                  presets={[
+                    { label: '1 Giờ Qua', value: [dayjs().subtract(1, 'hour'), dayjs()] },
+                    { label: 'Hôm Nay', value: [dayjs().startOf('day'), dayjs().endOf('day')] },
+                    { label: '24 Giờ Qua', value: [dayjs().subtract(24, 'hour'), dayjs()] },
+                    { label: '7 Ngày Qua', value: [dayjs().subtract(7, 'day'), dayjs()] },
+                    { label: '30 Ngày Qua', value: [dayjs().subtract(30, 'day'), dayjs()] },
+                  ]}
+                  value={dateRange}
+                  onChange={(dates) => {
+                    setDateRange(dates);
+                    setPage(1);
+                  }}
+                  placeholder={['Từ thời gian', 'Đến thời gian']}
+                  style={{ borderRadius: 6 }}
+                />
+
+                {/* 3. Lọc theo trạng thái Pass / Fail */}
+                <Select
+                  value={resultFilter}
+                  onChange={(val) => {
+                    setResultFilter(val);
+                    setPage(1);
+                  }}
+                  style={{ width: 130 }}
+                  options={[
+                    { label: 'Tất cả kết quả', value: 'all' },
+                    { label: '🟢 Chỉ PASS', value: 'pass' },
+                    { label: '🔴 Chỉ FAIL/CẤM', value: 'fail' },
+                  ]}
+                />
+
+                {/* 4. Nút làm mới */}
+                <Button
+                  icon={<ReloadOutlined spin={logLoading} />}
+                  onClick={fetchLogs}
+                  title="Làm mới danh sách"
+                >
+                  Làm mới
+                </Button>
+              </Space>
+            }
             variant="borderless"
-            styles={{ body: { padding: 0 } }}
+            styles={{ body: { padding: '12px 16px' } }}
             style={{ height: '100%' }}
           >
+            {/* Banner tóm tắt IP Insight khi lọc theo IP */}
+            {ipSummary && (
+              <Alert
+                type="info"
+                showIcon
+                icon={<SafetyCertificateOutlined style={{ fontSize: 20, color: '#7367f0' }} />}
+                style={{
+                  marginBottom: 14,
+                  borderRadius: 8,
+                  border: '1px solid #c7d2fe',
+                  backgroundColor: '#f5f7ff',
+                }}
+                message={
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <Space wrap size={[10, 6]}>
+                      <Text strong style={{ fontSize: 13 }}>
+                        🔍 Thống kê hoạt động IP: <span style={{ fontFamily: 'monospace', color: '#7367f0', fontSize: 14 }}>{ipSummary.ip}</span>
+                      </Text>
+                      <Tag color="blue" style={{ fontSize: 12 }}>
+                        Tổng: <strong>{ipSummary.totalCount}</strong> lượt
+                      </Tag>
+                      <Tag color="success" style={{ fontSize: 12 }}>
+                        ✓ {ipSummary.passCount} Pass ({Math.round((ipSummary.passCount / (ipSummary.totalCount || 1)) * 100)}%)
+                      </Tag>
+                      <Tag color="error" style={{ fontSize: 12 }}>
+                        ✕ {ipSummary.failCount} Fail ({Math.round((ipSummary.failCount / (ipSummary.totalCount || 1)) * 100)}%)
+                      </Tag>
+                      <Tag color={ipSummary.avgRiskScore >= 70 ? 'error' : ipSummary.avgRiskScore >= 30 ? 'warning' : 'success'} style={{ fontSize: 12 }}>
+                        Risk TB: {ipSummary.avgRiskScore}/100
+                      </Tag>
+                      {ipSummary.firstSeen && ipSummary.lastSeen && (
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          ⏱️ Lần đầu: {new Date(ipSummary.firstSeen).toLocaleDateString('vi-VN')} {new Date(ipSummary.firstSeen).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} → Gần nhất: {new Date(ipSummary.lastSeen).toLocaleDateString('vi-VN')} {new Date(ipSummary.lastSeen).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                    </Space>
+                    <Space size={8}>
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<EyeOutlined />}
+                        onClick={() => setSelectedIpForDetail(ipSummary.ip)}
+                        style={{ borderRadius: 6 }}
+                      >
+                        Xem Hồ Sơ Chi Tiết IP
+                      </Button>
+                      <Button
+                        size="small"
+                        icon={<ClearOutlined />}
+                        onClick={() => {
+                          setSearchIp('');
+                          setDebouncedIp('');
+                        }}
+                        style={{ borderRadius: 6 }}
+                      >
+                        Xóa Lọc IP
+                      </Button>
+                    </Space>
+                  </div>
+                }
+              />
+            )}
+
             <Table
-              dataSource={recentLogs}
-              rowKey={(record) => record.ip + record.created_at}
-              pagination={false}
+              dataSource={logs}
+              rowKey={(record) => (record.id || record.ip) + record.created_at}
+              loading={logLoading}
+              pagination={{
+                current: page,
+                pageSize,
+                total: logTotal,
+                showSizeChanger: true,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                onChange: (p, ps) => {
+                  setPage(p);
+                  setPageSize(ps);
+                },
+                showTotal: (total, range) => `${range[0]}-${range[1]} của ${total} lượt verify`,
+                size: 'small',
+              }}
               size="small"
               scroll={{ x: true }}
             >
@@ -472,8 +679,28 @@ export const DashboardPage = () => {
                 title="IP / Site"
                 render={(_: any, record: any) => (
                   <div>
-                    <Text strong style={{ fontFamily: "monospace", fontSize: 12 }}>{record.ip}</Text>
-                    {record.site_domain && <div><Text type="secondary" style={{ fontSize: 11 }}>{record.site_domain}</Text></div>}
+                    <Tooltip title="Bấm để tra cứu Geolocation, ISP, ASN & Threat Intel chi tiết của IP">
+                      <Tag
+                        color="geekblue"
+                        style={{
+                          cursor: 'pointer',
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          fontWeight: 600,
+                          marginBottom: 2,
+                        }}
+                        onClick={() => setSelectedIpForDetail(record.ip)}
+                      >
+                        🔍 {record.ip}
+                      </Tag>
+                    </Tooltip>
+                    {record.site_domain && (
+                      <div>
+                        <Text type="secondary" style={{ fontSize: 11 }}>🌐 {record.site_domain}</Text>
+                      </div>
+                    )}
                   </div>
                 )}
               />
@@ -482,35 +709,35 @@ export const DashboardPage = () => {
                 title="Risk / Hành vi"
                 render={(_: any, record: any) => {
                   const score = parseFloat(record.risk_score) || 0;
-                  const scoreColor = score >= 70 ? "#ea5455" : score >= 30 ? "#ff9f43" : "#28c76f";
-                  const levelName = score >= 70 ? "HIGH" : score >= 30 ? "MED" : "LOW";
+                  const scoreColor = score >= 70 ? '#ea5455' : score >= 30 ? '#ff9f43' : '#28c76f';
+                  const levelName = score >= 70 ? 'HIGH' : score >= 30 ? 'MED' : 'LOW';
                   const signals = record.risk_breakdown?.clientSignals;
 
                   return (
                     <div>
-                      <Tag color={score >= 70 ? "error" : score >= 30 ? "warning" : "success"} style={{ fontSize: 11, marginBottom: 1 }}>{levelName}</Tag>
+                      <Tag color={score >= 70 ? 'error' : score >= 30 ? 'warning' : 'success'} style={{ fontSize: 11, marginBottom: 1 }}>{levelName}</Tag>
                       <div><Text style={{ color: scoreColor, fontSize: 11, fontWeight: 700 }}>{score.toFixed(0)}/100</Text></div>
                       
                       {/* Hiển thị tóm tắt Client Signals (Nguồn traffic/Hành vi) */}
                       {signals && (
                         <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 190 }}>
-                          {signals.webdriver && <Tag color="error" style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>Bot Webdriver</Tag>}
+                          {signals.webdriver && <Tag color="error" style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>Bot Webdriver</Tag>}
                           {signals.execution_count && signals.execution_count > 1 && (
                             <Tooltip title={`Lượt submit thứ ${signals.execution_count} trên cùng 1 phiên trang`}>
-                              <Tag color="purple" style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
+                              <Tag color="purple" style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>
                                 🔁 Lặp #{signals.execution_count}
                               </Tag>
                             </Tooltip>
                           )}
                           {signals.time_on_page_ms !== undefined && (
                             <Tooltip title={`Khoảng cách submit: ${(signals.time_on_page_ms / 1000).toFixed(1)}s (Tổng thời gian trên trang: ${((signals.total_page_duration_ms || signals.time_on_page_ms) / 1000).toFixed(1)}s)`}>
-                              <Tag color={signals.time_on_page_ms < 600 ? "error" : "default"} style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
+                              <Tag color={signals.time_on_page_ms < 600 ? 'error' : 'default'} style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>
                                 ⏱️ {(signals.time_on_page_ms / 1000).toFixed(1)}s
                               </Tag>
                             </Tooltip>
                           )}
                           <Tooltip title={`Tương tác lượt này: ${signals.mouse_moves || 0} di chuột, ${signals.mouse_clicks || 0} click, ${signals.key_strokes || 0} phím`}>
-                            <Tag color={(signals.mouse_moves === 0 && signals.key_strokes === 0) ? "error" : "default"} style={{ fontSize: 9, margin: 0, padding: "0 4px" }}>
+                            <Tag color={(signals.mouse_moves === 0 && signals.key_strokes === 0) ? 'error' : 'default'} style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>
                               🖱️ {signals.mouse_moves || 0} | ⌨️ {signals.key_strokes || 0}
                             </Tag>
                           </Tooltip>
@@ -526,17 +753,17 @@ export const DashboardPage = () => {
                 render={(_: any, record: any) => {
                   const bd = record.risk_breakdown || {};
                   const reasons: string[] = [];
-                  if (bd.isBannedIp) reasons.push("IP Bị Cấm");
+                  if (bd.isBannedIp) reasons.push('IP Bị Cấm');
                   if (bd.clientBehaviorScore > 0) reasons.push(`Bot (+${bd.clientBehaviorScore})`);
                   if (bd.threatIntelScore > 0) reasons.push(`${bd.threatCategory || 'Threat'} (+${bd.threatIntelScore})`);
                   if (bd.reputationScore > 0) reasons.push(`Reputation (+${bd.reputationScore})`);
                   if (bd.rateLimitScore > 0) reasons.push(`RateLimit (+${bd.rateLimitScore})`);
-                  if (reasons.length === 0) reasons.push("Bình thường");
+                  if (reasons.length === 0) reasons.push('Bình thường');
 
                   return (
                     <div>
-                      <Tag color={record.result === "pass" ? "success" : "error"} style={{ fontSize: 11 }}>
-                        {record.result.toUpperCase()}
+                      <Tag color={record.result === 'pass' ? 'success' : 'error'} style={{ fontSize: 11 }}>
+                        {record.result ? record.result.toUpperCase() : 'UNKNOWN'}
                       </Tag>
                       <Tooltip title={reasons.join(' | ')}>
                         <div style={{ marginTop: 1, cursor: 'help' }}>
@@ -557,14 +784,14 @@ export const DashboardPage = () => {
                   const d = new Date(ts);
                   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
                   const diffHr = Math.floor(diffMin / 60);
-                  const timeAgo = diffMin < 1 ? "vừa xong"
+                  const timeAgo = diffMin < 1 ? 'vừa xong'
                     : diffMin < 60 ? `${diffMin} phút trước`
                     : diffHr < 24 ? `${diffHr} giờ trước`
-                    : d.toLocaleDateString("vi-VN");
+                    : d.toLocaleDateString('vi-VN');
                   return (
                     <div>
                       <Text style={{ fontSize: 12 }}>{timeAgo}</Text>
-                      <div><Text type="secondary" style={{ fontSize: 11 }}>{d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</Text></div>
+                      <div><Text type="secondary" style={{ fontSize: 11 }}>{d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</Text></div>
                     </div>
                   );
                 }}
@@ -573,6 +800,20 @@ export const DashboardPage = () => {
           </Card>
         </Col>
       </Row>
+
+      {/* Drawer Tra Cứu Chi Tiết IP (IP Intelligence) */}
+      <IpDetailDrawer
+        ip={selectedIpForDetail}
+        open={Boolean(selectedIpForDetail)}
+        onClose={() => setSelectedIpForDetail(null)}
+        onFilterLogs={(ip) => {
+          setSearchIp(ip);
+          setDebouncedIp(ip);
+          setPage(1);
+        }}
+        onBanStatusChange={fetchLogs}
+      />
     </div>
   );
 };
+
