@@ -23,6 +23,11 @@ export class AdminService {
     @Optional() private verifyService?: VerifyService,
   ) {}
 
+  private hashPassword(password: string): string {
+    const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
+    return crypto.createHash('sha256').update(password.trim() + salt).digest('hex');
+  }
+
   async getDashboardStats(accountId?: string, role?: string) {
     if (role !== 'admin' && accountId) {
       // 1. Thống kê theo riêng tài khoản người dùng
@@ -330,8 +335,7 @@ export class AdminService {
     }
 
     // 2. Tạo tài khoản Super Admin
-    const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
-    const passwordHash = crypto.createHash('sha256').update(body.admin_password.trim() + salt).digest('hex');
+    const passwordHash = this.hashPassword(body.admin_password);
 
     const admin = this.accountsRepo.create({
       email: body.admin_email.trim().toLowerCase(),
@@ -443,8 +447,7 @@ export class AdminService {
       throw new BadRequestException('Email đã được sử dụng');
     }
 
-    const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
-    const passwordHash = crypto.createHash('sha256').update(password.trim() + salt).digest('hex');
+    const passwordHash = this.hashPassword(password);
     const activationToken = crypto.randomBytes(32).toString('hex');
 
     let defaultPlan = await this.plansRepo.findOneBy({ code: 'default' });
@@ -513,8 +516,7 @@ export class AdminService {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
     }
 
-    const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
-    const passwordHash = crypto.createHash('sha256').update(password.trim() + salt).digest('hex');
+    const passwordHash = this.hashPassword(password);
 
     if (acc.password_hash !== passwordHash) {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác');
@@ -587,8 +589,7 @@ export class AdminService {
     if (body.status) acc.status = body.status;
     if (body.role) acc.role = body.role;
     if (body.password && body.password.trim().length > 0) {
-      const salt = 'vina_captcha_salt_2026';
-      acc.password_hash = crypto.createHash('sha256').update(body.password.trim() + salt).digest('hex');
+      acc.password_hash = this.hashPassword(body.password);
     }
     if (body.plan_id) {
       const plan = await this.plansRepo.findOneBy({ id: body.plan_id });

@@ -42,6 +42,7 @@ describe('AdminService', () => {
   };
 
   beforeEach(async () => {
+    process.env.AUTH_CAPTCHA_DISABLED = 'true';
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminService,
@@ -76,6 +77,50 @@ describe('AdminService', () => {
         is_verified: true,
       });
       await expect(service.login('user@domain.com', 'wrong_password')).rejects.toThrow();
+    });
+
+    it('should successfully login and return tokens when password matches', async () => {
+      // Use the actual hash logic
+      const salt = process.env.APP_SALT || process.env.JWT_SECRET || 'vina_captcha_salt_2026';
+      const crypto = await import('crypto');
+      const correctHash = crypto.createHash('sha256').update('CorrectPassword123!' + salt).digest('hex');
+
+      mockRepo.findOneBy = () => Promise.resolve({
+        id: 'acc-123',
+        email: 'user@domain.com',
+        password_hash: correctHash,
+        status: 'active',
+        is_verified: true,
+        role: 'user',
+        name: 'Test User',
+      });
+
+      const result = await service.login('user@domain.com', 'CorrectPassword123!');
+      expect(result).toHaveProperty('access_token');
+      expect(result.account.email).toBe('user@domain.com');
+    });
+  });
+
+  describe('updateAccount', () => {
+    it('should update password with matching hash so login can succeed', async () => {
+      const existingAccount = {
+        id: 'acc-123',
+        email: 'admin@domain.com',
+        password_hash: 'old_hash',
+        status: 'active',
+        is_verified: true,
+        role: 'admin',
+        name: 'Admin User',
+      };
+
+      mockRepo.findOne = () => Promise.resolve(existingAccount);
+      mockRepo.save = (acc: any) => Promise.resolve(acc);
+
+      const updated = await service.updateAccount('acc-123', { password: 'NewSecurePassword456!' });
+
+      mockRepo.findOneBy = () => Promise.resolve(updated);
+      const loginRes = await service.login('admin@domain.com', 'NewSecurePassword456!');
+      expect(loginRes).toHaveProperty('access_token');
     });
   });
 });
