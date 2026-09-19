@@ -13,6 +13,8 @@ export interface RiskEvaluationResult {
     threatIntelScore: number;
     reputationScore: number;
     rateLimitScore: number;
+    rateLimitCounts?: { count10s: number; count10m: number; count1h: number };
+    isRateLimitExceeded?: boolean;
     threatCategory?: string;
     isBannedIp?: boolean;
     clientSignals?: ClientSignalsDto;
@@ -177,21 +179,43 @@ export class RiskEngineService {
     }
 
     // ==========================================
-    // 4. CHẤM ĐIỂM RATE LIMITING (Tần suất gọi /issue)
+    // 4. CHẤM ĐIỂM RATE LIMITING ĐA TẦNG (10s, 10m, 1h)
     // ==========================================
-    const rateLimitKey = `ratelimit:issue:${clientIp}`;
-    const requestCount = await this.redisService.incrementRateLimit(rateLimitKey, 10); // Cửa sổ 10s
+    // Đo lường vận tốc request song song trên 3 cửa sổ thời gian để bắt cả Burst Spam và Low & Slow Bot
+    const [count10s, count10m, count1h] = await Promise.all([
+      this.redisService.incrementRateLimit(`ratelimit:issue:10s:${clientIp}`, 10),    // 10s window (Burst)
+      this.redisService.incrementRateLimit(`ratelimit:issue:10m:${clientIp}`, 600),   // 10m window (Low & Slow)
+      this.redisService.incrementRateLimit(`ratelimit:issue:1h:${clientIp}`, 3600),   // 1h window (Scraping)
+    ]);
 
-    if (requestCount > 20) {
-      // Spam dồn dập
-      rateLimitScore += 60;
-    } else if (requestCount > 10) {
-      // Tần suất cao bất thường
-      rateLimitScore += 40;
-    } else if (requestCount > 4) {
-      // Gọi > 4 lần trong 10s từ cùng 1 IP
+    // 4.1. Cửa sổ 10 giây (Burst attack)
+    if (count10s > 20) {
+      rateLimitScore += 70;
+    } else if (count10s > 10) {
+      rateLimitScore += 45;
+    } else if (count10s > 4) {
       rateLimitScore += 25;
     }
+
+    // 4.2. Cửa sổ 10 phút (Low & Slow Bot: submit cách nhau 1-2 phút)
+    if (count10m > 20) {
+      rateLimitScore += 80;
+    } else if (count10m > 10) {
+      // > 10 lần / 10 phút (bắt trường hợp 13 lần/10 phút)
+      rateLimitScore += 60;
+    } else if (count10m > 5) {
+      rateLimitScore += 35;
+    }
+
+    // 4.3. Cửa sổ 1 giờ (Scraping kéo dài)
+    if (count1h > 60) {
+      rateLimitScore += 60;
+    } else if (count1h > 30) {
+      rateLimitScore += 35;
+    }
+
+    // Đánh dấu cờ vượt ngưỡng spam cần chặn cứng
+    const isRateLimitExceeded = count10m > 10 || count10s > 20 || count1h > 60;
 
     // ==========================================
     // 5. TỔNG HỢP VÀ PHÂN LOẠI CHALLENGE (Escalation)
@@ -229,6 +253,8 @@ export class RiskEngineService {
         threatIntelScore,
         reputationScore,
         rateLimitScore,
+        rateLimitCounts: { count10s, count10m, count1h },
+        isRateLimitExceeded,
         threatCategory: threatMatch.category,
         isBannedIp,
         clientSignals: signals, // Thêm thông số nguồn traffic để hiển thị trên Dashboard

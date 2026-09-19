@@ -108,10 +108,14 @@ describe('RiskEngineService', () => {
       expect(result.powDifficulty).toBe(18); // Since score >= 90
     });
 
-    it('should add rate limit score if redis increment is high', async () => {
+    it('should add rate limit score and mark isRateLimitExceeded if 10m count is high (Low & Slow bot)', async () => {
       mockThreatIntelService.checkIp.mockResolvedValue({ matched: false });
       mockReputationService.checkIpReputation.mockResolvedValue({ hasRecord: false });
-      mockRedisService.incrementRateLimit.mockResolvedValue(30); // > 20 = +60 score
+      // Giả lập: count10s = 1 (không burst), count10m = 13 (13 lần trong 10 phút), count1h = 13
+      mockRedisService.incrementRateLimit
+        .mockResolvedValueOnce(1)   // 10s
+        .mockResolvedValueOnce(13)  // 10m
+        .mockResolvedValueOnce(13); // 1h
 
       const signals: ClientSignalsDto = {
         webdriver: false,
@@ -122,11 +126,13 @@ describe('RiskEngineService', () => {
         key_strokes: 15,
       };
 
-      const result = await service.evaluateRisk('3.4.5.6', signals, false);
+      const result = await service.evaluateRisk('116.96.46.193', signals, false);
 
-      expect(result.challengeType).toBe('slider'); // Score is 60 -> slider (>= 30)
+      // Score = 60 (> 10 reqs/10m) -> challenge 'slider' và isRateLimitExceeded = true
       expect(result.riskScore).toBe(60);
       expect(result.breakdown.rateLimitScore).toBe(60);
+      expect(result.breakdown.isRateLimitExceeded).toBe(true);
+      expect(result.breakdown.rateLimitCounts?.count10m).toBe(13);
     });
 
     it('should escalate to challenge when repeated submission has zero fresh physical interaction', async () => {

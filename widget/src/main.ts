@@ -911,10 +911,10 @@ class NhanHoaCaptcha {
         const errJson = (await issueRes.json().catch(() => ({}))) as any;
         const errCode = errJson?.error?.code;
         const errMsg = errJson?.error?.message;
-        if (issueRes.status === 403 && errCode === 'ip_banned') {
-          this.setBadgeState('error', 'IP bị khóa');
+        if (issueRes.status === 403 && (errCode === 'ip_banned' || errCode === 'rate_limit_exceeded')) {
+          this.setBadgeState('error', errCode === 'ip_banned' ? 'IP bị khóa' : 'Tần suất quá nhanh');
           this.isSubmitting = false;
-          if (this.config.onError) this.config.onError(new Error(errMsg || 'IP bị cấm truy cập'));
+          if (this.config.onError) this.config.onError(new Error(errMsg || 'Bị chặn do tần suất gửi quá cao'));
           return; // Chặn đứng hoàn toàn, KHÔNG fail-open submit form
         }
         throw new Error(errMsg || `Issue failed: ${issueRes.status}`);
@@ -1044,7 +1044,8 @@ class NhanHoaCaptcha {
         const errJson = (await issueRes.json().catch(() => ({}))) as any;
         const errCode = errJson?.error?.code;
         const errMsg = errJson?.error?.message;
-        this.setBadgeState('error', errCode === 'ip_banned' ? 'IP bị khóa' : 'Lỗi kết nối');
+        const badgeMsg = errCode === 'ip_banned' ? 'IP bị khóa' : (errCode === 'rate_limit_exceeded' ? 'Tần suất quá nhanh' : 'Lỗi kết nối');
+        this.setBadgeState('error', badgeMsg);
         setTimeout(() => this.setBadgeState('idle'), 2000);
         if (this.config.onError) this.config.onError(new Error(errMsg || `Issue failed: ${issueRes.status}`));
         return {

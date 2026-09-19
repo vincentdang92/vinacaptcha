@@ -166,6 +166,39 @@ export class IssueService {
       });
     }
 
+    // 4.2. RATE LIMIT HARD BLOCK: Nếu tần suất gửi quá cao (> 10 lần/10 phút hoặc spam dồn dập) -> Chặn 403
+    if (riskEval.breakdown.isRateLimitExceeded || riskEval.breakdown.rateLimitScore >= 60) {
+      try {
+        await this.dataSource.query(
+          `
+          INSERT INTO verification_logs (site_id, session_id, ip, risk_score, challenge_type, result, risk_breakdown, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          `,
+          [
+            siteId,
+            uuidv4(),
+            clientIp,
+            riskEval.riskScore,
+            'none',
+            'fail',
+            riskEval.breakdown,
+          ],
+        );
+      } catch (err) {
+        console.error('[IssueService] Failed to log rate limit rejection', err);
+      }
+
+      await this.redisService.trackRequestEvent(siteId, 'verify_fail', 'none');
+
+      const count10m = riskEval.breakdown.rateLimitCounts?.count10m || 10;
+      throw new ForbiddenException({
+        error: {
+          code: 'rate_limit_exceeded',
+          message: `Tần suất gửi yêu cầu từ địa chỉ IP của bạn quá cao (${count10m} lần/10 phút). Vui lòng đợi 10 phút trước khi thử lại.`,
+        },
+      });
+    }
+
     // 5. Xác định Challenge Type theo cấu hình của Site (auto | none | slider | pow)
     const configuredMode = (siteChallengeMode || 'auto') as 'auto' | 'none' | 'slider' | 'pow';
     let effectiveChallengeType: 'none' | 'slider' | 'pow';

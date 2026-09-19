@@ -58,8 +58,9 @@ Content-Type: application/json
 |---|---|---|
 | 401 | `missing_site_key` / `invalid_site_key` | Thiếu header hoặc Site Key sai/revoked/bị khóa |
 | 403 | `ip_banned` | Địa chỉ IP nằm trong danh sách cấm / lịch sử vi phạm cao (`failCount > 10`) |
+| 403 | `rate_limit_exceeded` | Tần suất gửi yêu cầu quá cao (> 10 lần/10 phút hoặc spam dồn dập). Tự động khóa 10 phút. |
 | 403 | `domain_not_allowed` | `domain` không nằm trong `allowed_domains` của site |
-| 429 | `quota_exceeded` / `rate_limit_exceeded` | Vượt hạn mức gói cước tháng hoặc rate limit |
+| 429 | `quota_exceeded` | Vượt hạn mức gói cước tháng của tài khoản |
 
 ```json
 { "error": { "code": "ip_banned", "message": "Địa chỉ IP của bạn tạm thời bị khóa do có quá nhiều hành vi bất thường. Vui lòng liên hệ quản trị viên." } }

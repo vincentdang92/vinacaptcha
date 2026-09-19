@@ -208,5 +208,46 @@ describe('IssueService', () => {
         'none',
       );
     });
+
+    it('should throw ForbiddenException when IP exceeds multi-tier rate limit (e.g. 13 requests in 10 minutes)', async () => {
+      mockDataSource.query.mockResolvedValue([{ 
+        id: 1, 
+        site_id: 'site-456', 
+        revoked_at: null,
+        platform: 'web',
+        primary_domain: 'example.com',
+        allowed_domains: [],
+      }]);
+
+      mockRiskEngineService.evaluateRisk.mockResolvedValue({
+        challengeType: 'slider',
+        powDifficulty: null,
+        riskScore: 60,
+        breakdown: {
+          isRateLimitExceeded: true,
+          rateLimitScore: 60,
+          rateLimitCounts: { count10s: 1, count10m: 13, count1h: 13 },
+        },
+      });
+
+      const dto = { domain: 'example.com', client_signals: {}, honeypot_filled: false } as IssueTokenDto;
+      
+      await expect(service.issueToken('valid_key', dto, '116.96.46.193')).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      // Verify log was recorded with fail
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO verification_logs'),
+        expect.arrayContaining(['site-456', expect.any(String), '116.96.46.193', 60, 'none', 'fail']),
+      );
+
+      // Verify tracking event
+      expect(mockRedisService.trackRequestEvent).toHaveBeenCalledWith(
+        'site-456',
+        'verify_fail',
+        'none',
+      );
+    });
   });
 });
