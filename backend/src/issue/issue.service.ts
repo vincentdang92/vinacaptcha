@@ -190,11 +190,10 @@ export class IssueService {
 
       await this.redisService.trackRequestEvent(siteId, 'verify_fail', 'none');
 
-      const count10m = riskEval.breakdown.rateLimitCounts?.count10m || 10;
       throw new ForbiddenException({
         error: {
           code: 'rate_limit_exceeded',
-          message: `Tần suất gửi yêu cầu từ địa chỉ IP của bạn quá cao (${count10m} lần/10 phút). Vui lòng đợi 10 phút trước khi thử lại.`,
+          message: 'Thao tác quá nhanh, vui lòng thử lại sau.',
         },
       });
     }

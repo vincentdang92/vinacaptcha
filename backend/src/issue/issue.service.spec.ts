@@ -226,7 +226,7 @@ describe('IssueService', () => {
         breakdown: {
           isRateLimitExceeded: true,
           rateLimitScore: 60,
-          rateLimitCounts: { count10s: 1, count10m: 13, count1h: 13 },
+          rateLimitCounts: { count10s: 1, count5m: 8, count1h: 13 },
         },
       });
 
