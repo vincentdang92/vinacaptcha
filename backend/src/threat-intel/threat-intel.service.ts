@@ -8,6 +8,11 @@ import { SpamhausProvider } from './providers/spamhaus.provider.js';
 import { GoogleCloudProvider } from './providers/google-cloud.provider.js';
 import { AbusechProvider } from './providers/abusech.provider.js';
 import { AbuseIpDbProvider } from './providers/abuseipdb.provider.js';
+import { EmergingThreatsProvider } from './providers/emerging-threats.provider.js';
+import { BlocklistDeProvider } from './providers/blocklist-de.provider.js';
+import { CinsArmyProvider } from './providers/cins-army.provider.js';
+import { GreenSnowProvider } from './providers/greensnow.provider.js';
+import { DigitalOceanProvider } from './providers/digitalocean.provider.js';
 
 export interface ThreatMatchResult {
   matched: boolean;
@@ -25,20 +30,30 @@ export class ThreatIntelService implements OnModuleInit {
     // Tầng CỨNG — sync 1 lần/ngày
     private readonly awsProvider: AwsIpProvider,
     private readonly gcpProvider: GoogleCloudProvider,
+    private readonly digitalOceanProvider: DigitalOceanProvider,
     private readonly torProvider: TorExitProvider,
     private readonly spamhausProvider: SpamhausProvider,
     private readonly fireHolProvider: MockThreatProvider,
     private readonly abusechProvider: AbusechProvider,
+    private readonly emergingThreatsProvider: EmergingThreatsProvider,
+    private readonly blocklistDeProvider: BlocklistDeProvider,
+    private readonly cinsArmyProvider: CinsArmyProvider,
+    private readonly greenSnowProvider: GreenSnowProvider,
     // Tầng VỪA — sync mỗi 6-12h, cần API key
     private readonly abuseIpDbProvider: AbuseIpDbProvider,
   ) {
     // Đăng ký toàn bộ providers theo Connector Pattern (ARCHITECTURE.md 3.6)
     this.registerProvider(this.awsProvider);
     this.registerProvider(this.gcpProvider);
+    this.registerProvider(this.digitalOceanProvider);
     this.registerProvider(this.torProvider);
     this.registerProvider(this.spamhausProvider);
     this.registerProvider(this.fireHolProvider);
     this.registerProvider(this.abusechProvider);
+    this.registerProvider(this.emergingThreatsProvider);
+    this.registerProvider(this.blocklistDeProvider);
+    this.registerProvider(this.cinsArmyProvider);
+    this.registerProvider(this.greenSnowProvider);
     this.registerProvider(this.abuseIpDbProvider);
   }
 

@@ -32,7 +32,19 @@ export class ThreatIntelSyncJob {
   async syncHardTierSources() {
     this.logger.log('🔄 [Cron] Bắt đầu sync TẦNG CỨNG threat intel...');
 
-    const hardSources = ['aws', 'gcp', 'tor_exit', 'spamhaus_drop', 'firehol_level1', 'abusech'];
+    const hardSources = [
+      'aws',
+      'gcp',
+      'digitalocean',
+      'tor_exit',
+      'spamhaus_drop',
+      'firehol_level1',
+      'abusech',
+      'emerging_threats',
+      'blocklist_de',
+      'cins_army',
+      'greensnow',
+    ];
     const results: Record<string, number> = {};
 
     for (const source of hardSources) {

@@ -133,14 +133,22 @@ export class RiskEngineService {
     // ==========================================
     const threatMatch = await this.threatIntelService.checkIp(clientIp);
     if (threatMatch.matched) {
-      if (threatMatch.category === 'attacks' || threatMatch.category === 'spam') {
-        // IP nằm trong Blacklist tấn công / spam quốc tế
+      if (
+        threatMatch.category === 'attacks' ||
+        threatMatch.category === 'spam' ||
+        threatMatch.category === 'botnet_c2' ||
+        threatMatch.category === 'abuse_reported'
+      ) {
+        // IP nằm trong Blacklist tấn công / spam / botnet / abuse quốc tế
         threatIntelScore += 80;
+      } else if (threatMatch.category === 'scanners') {
+        // IP chuyên quét lỗ hổng và brute-force
+        threatIntelScore += 65;
       } else if (threatMatch.category === 'tor' || threatMatch.category === 'proxy_anon') {
         // IP đi qua mạng Tor / Proxy ẩn danh
         threatIntelScore += 60;
-      } else if (threatMatch.category === 'datacenter') {
-        // IP thuộc Server Cloud (AWS, GCP...)
+      } else if (threatMatch.category === 'datacenter' || threatMatch.category === 'proxy_cdn') {
+        // IP thuộc Server Cloud (AWS, GCP, DigitalOcean...)
         threatIntelScore += 35;
       }
     }

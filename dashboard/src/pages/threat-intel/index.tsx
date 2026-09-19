@@ -27,25 +27,38 @@ const CATEGORY_COLOR: Record<string, string> = {
   datacenter: "blue",
   tor: "purple",
   attacks: "red",
-  spam: "orange",
-  proxy_anon: "magenta",
+  botnet_c2: "volcano",
+  scanners: "orange",
+  spam: "gold",
+  abuse_reported: "magenta",
+  proxy_anon: "cyan",
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  datacenter: "Cloud/Datacenter",
+  datacenter: "Cloud / Datacenter",
   tor: "Tor Exit Node",
-  attacks: "Botnet/Attacks",
-  spam: "Spam/Abuse",
+  attacks: "Attacks / Brute-force",
+  botnet_c2: "Botnet C2 / Malware",
+  scanners: "Web Scanners / Probing",
+  spam: "Spamhaus Hijacked",
+  abuse_reported: "Community Reported",
   proxy_anon: "Proxy ẩn danh",
 };
 
 const SOURCE_LABEL: Record<string, string> = {
   aws: "Amazon AWS",
   gcp: "Google Cloud",
+  digitalocean: "DigitalOcean Cloud",
   azure: "Microsoft Azure",
-  tor_exit: "Tor Project",
+  tor_exit: "Tor Project Exit Nodes",
+  spamhaus_drop: "Spamhaus DROP / EDROP",
   firehol_level1: "FireHOL Level 1",
-  firehol_level2: "FireHOL Level 2",
+  abusech: "abuse.ch Feodo Tracker",
+  emerging_threats: "Proofpoint ET Open",
+  blocklist_de: "Blocklist.de Fail2ban",
+  cins_army: "CINS Army CI Bad Guys",
+  greensnow: "GreenSnow Security Feed",
+  abuseipdb: "AbuseIPDB Community",
 };
 
 export const ThreatIntelPage = () => {
