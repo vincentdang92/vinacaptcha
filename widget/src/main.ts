@@ -907,7 +907,18 @@ class NhanHoaCaptcha {
         }),
       });
 
-      if (!issueRes.ok) throw new Error(`Issue failed: ${issueRes.status}`);
+      if (!issueRes.ok) {
+        const errJson = (await issueRes.json().catch(() => ({}))) as any;
+        const errCode = errJson?.error?.code;
+        const errMsg = errJson?.error?.message;
+        if (issueRes.status === 403 && errCode === 'ip_banned') {
+          this.setBadgeState('error', 'IP bị khóa');
+          this.isSubmitting = false;
+          if (this.config.onError) this.config.onError(new Error(errMsg || 'IP bị cấm truy cập'));
+          return; // Chặn đứng hoàn toàn, KHÔNG fail-open submit form
+        }
+        throw new Error(errMsg || `Issue failed: ${issueRes.status}`);
+      }
       const issueData = await issueRes.json();
 
       if (this.config.debug) {
@@ -1029,7 +1040,19 @@ class NhanHoaCaptcha {
         }),
       });
 
-      if (!issueRes.ok) throw new Error(`Issue failed: ${issueRes.status}`);
+      if (!issueRes.ok) {
+        const errJson = (await issueRes.json().catch(() => ({}))) as any;
+        const errCode = errJson?.error?.code;
+        const errMsg = errJson?.error?.message;
+        this.setBadgeState('error', errCode === 'ip_banned' ? 'IP bị khóa' : 'Lỗi kết nối');
+        setTimeout(() => this.setBadgeState('idle'), 2000);
+        if (this.config.onError) this.config.onError(new Error(errMsg || `Issue failed: ${issueRes.status}`));
+        return {
+          success: false,
+          reason: errCode || `issue_failed_${issueRes.status}`,
+          duration_ms: Date.now() - startTime,
+        };
+      }
       const issueData = await issueRes.json();
 
       let challengeResponse: any = undefined;

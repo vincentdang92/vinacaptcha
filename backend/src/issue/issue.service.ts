@@ -134,6 +134,38 @@ export class IssueService {
       platform
     );
 
+    // 4.1. HARD BLOCK: Nếu IP đã bị Cấm (Banned IP trong hệ thống IP Reputation) -> Lập tức chặn 403 Forbidden
+    if (riskEval.breakdown.isBannedIp) {
+      try {
+        await this.dataSource.query(
+          `
+          INSERT INTO verification_logs (site_id, session_id, ip, risk_score, challenge_type, result, risk_breakdown, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          `,
+          [
+            siteId,
+            uuidv4(),
+            clientIp,
+            riskEval.riskScore,
+            'none',
+            'fail',
+            riskEval.breakdown,
+          ],
+        );
+      } catch (err) {
+        console.error('[IssueService] Failed to log banned IP rejection', err);
+      }
+
+      await this.redisService.trackRequestEvent(siteId, 'verify_fail', 'none');
+
+      throw new ForbiddenException({
+        error: {
+          code: 'ip_banned',
+          message: 'Địa chỉ IP của bạn tạm thời bị khóa do có quá nhiều hành vi bất thường. Vui lòng liên hệ quản trị viên.',
+        },
+      });
+    }
+
     // 5. Xác định Challenge Type theo cấu hình của Site (auto | none | slider | pow)
     const configuredMode = (siteChallengeMode || 'auto') as 'auto' | 'none' | 'slider' | 'pow';
     let effectiveChallengeType: 'none' | 'slider' | 'pow';

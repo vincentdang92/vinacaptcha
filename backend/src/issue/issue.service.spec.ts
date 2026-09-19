@@ -168,5 +168,45 @@ describe('IssueService', () => {
       expect(result.challenge_type).toBe('pow');
       expect(result.pow_difficulty).toBe(12);
     });
+
+    it('should throw ForbiddenException and log failure when IP is banned', async () => {
+      mockDataSource.query.mockResolvedValue([{ 
+        id: 1, 
+        site_id: 'site-123', 
+        revoked_at: null,
+        platform: 'web',
+        primary_domain: 'example.com',
+        allowed_domains: [],
+      }]);
+
+      mockRiskEngineService.evaluateRisk.mockResolvedValue({
+        challengeType: 'pow',
+        powDifficulty: 18,
+        riskScore: 100,
+        breakdown: {
+          isBannedIp: true,
+          reputationScore: 100,
+        },
+      });
+
+      const dto = { domain: 'example.com', client_signals: {}, honeypot_filled: false } as IssueTokenDto;
+      
+      await expect(service.issueToken('valid_key', dto, '1.2.3.4')).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      // Verify log was recorded
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO verification_logs'),
+        expect.arrayContaining(['site-123', expect.any(String), '1.2.3.4', 100, 'none', 'fail']),
+      );
+
+      // Verify event was tracked
+      expect(mockRedisService.trackRequestEvent).toHaveBeenCalledWith(
+        'site-123',
+        'verify_fail',
+        'none',
+      );
+    });
   });
 });

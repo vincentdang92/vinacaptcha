@@ -57,11 +57,12 @@ Content-Type: application/json
 | Code | Error Code | Khi nào |
 |---|---|---|
 | 401 | `missing_site_key` / `invalid_site_key` | Thiếu header hoặc Site Key sai/revoked/bị khóa |
+| 403 | `ip_banned` | Địa chỉ IP nằm trong danh sách cấm / lịch sử vi phạm cao (`failCount > 10`) |
 | 403 | `domain_not_allowed` | `domain` không nằm trong `allowed_domains` của site |
 | 429 | `quota_exceeded` / `rate_limit_exceeded` | Vượt hạn mức gói cước tháng hoặc rate limit |
 
 ```json
-{ "error": { "code": "domain_not_allowed", "message": "Nguồn gốc request (Domain/Bundle ID) không nằm trong whitelist" } }
+{ "error": { "code": "ip_banned", "message": "Địa chỉ IP của bạn tạm thời bị khóa do có quá nhiều hành vi bất thường. Vui lòng liên hệ quản trị viên." } }
 ```
 
 ### 1.2 `POST /v1/verify`

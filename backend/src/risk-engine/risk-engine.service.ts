@@ -153,8 +153,8 @@ export class RiskEngineService {
 
     if (repMatch.hasRecord) {
       if (repMatch.isBanned) {
-        // Đã fail quá 10 lần -> Coi như IP Banned
-        reputationScore += 50;
+        // Đã fail quá 10 lần -> Coi như IP Banned (Max risk score 100)
+        reputationScore += 100;
         isBannedIp = true;
       } else if (repMatch.failCount >= 5) {
         reputationScore += 35;

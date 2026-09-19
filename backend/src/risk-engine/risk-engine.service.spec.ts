@@ -174,5 +174,31 @@ describe('RiskEngineService', () => {
       expect(result.challengeType).toBe('slider');
       expect(result.riskScore).toBe(50);
     });
+
+    it('should assign max risk score 100 and mark isBannedIp true when IP is banned in reputation service', async () => {
+      mockThreatIntelService.checkIp.mockResolvedValue({ matched: false });
+      mockReputationService.checkIpReputation.mockResolvedValue({
+        hasRecord: true,
+        failCount: 15,
+        siteCountSeen: 1,
+        isBanned: true,
+      });
+      mockRedisService.incrementRateLimit.mockResolvedValue(1);
+
+      const signals: ClientSignalsDto = {
+        webdriver: false,
+        canvas_fingerprint: 'abcd123',
+        time_on_page_ms: 3000,
+        mouse_moves: 100,
+        mouse_clicks: 2,
+        key_strokes: 15,
+      };
+
+      const result = await service.evaluateRisk('1.2.3.4', signals, false);
+
+      expect(result.riskScore).toBe(100);
+      expect(result.breakdown.isBannedIp).toBe(true);
+      expect(result.breakdown.reputationScore).toBe(100);
+    });
   });
 });
