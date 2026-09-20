@@ -25,6 +25,9 @@ export const RiskEnginePage: React.FC = () => {
   const [simThreatCategory, setSimThreatCategory] = useState<'none' | 'datacenter' | 'tor' | 'spam'>('none');
   const [simIpFailCount, setSimIpFailCount] = useState(0);
   const [simMultiSiteSeen, setSimMultiSiteSeen] = useState(false);
+  const [simRate10s, setSimRate10s] = useState(1); // reqs in 10s
+  const [simRate5m, setSimRate5m] = useState(1);  // reqs in 5m
+  const [simRate1h, setSimRate1h] = useState(5);  // reqs in 1h
 
   // Calculate simulated score
   let clientBehaviorScore = 0;
@@ -67,13 +70,31 @@ export const RiskEnginePage: React.FC = () => {
     reputationScore = Math.round(reputationScore * 1.5);
   }
 
-  const totalSimScore = Math.min(100, Math.max(0, clientBehaviorScore + threatIntelScore + reputationScore));
+  // Rate Limiting Multi-Tier Scoring
+  let rateLimitScore = 0;
+  if (simRate10s > 20) rateLimitScore += 70;
+  else if (simRate10s > 10) rateLimitScore += 45;
+  else if (simRate10s > 4) rateLimitScore += 25;
 
-  let simChallengeType: 'Invisible Pass' | 'Slider Puzzle' | 'Proof-of-Work (PoW)' = 'Invisible Pass';
+  if (simRate5m > 15) rateLimitScore += 80;
+  else if (simRate5m > 6) rateLimitScore += 60;
+  else if (simRate5m > 3) rateLimitScore += 35;
+
+  if (simRate1h > 60) rateLimitScore += 60;
+  else if (simRate1h > 30) rateLimitScore += 35;
+
+  const isRateLimitBlocked = simRate5m > 6 || simRate10s > 20 || simRate1h > 60;
+
+  const totalSimScore = Math.min(100, Math.max(0, clientBehaviorScore + threatIntelScore + reputationScore + rateLimitScore));
+
+  let simChallengeType: 'Invisible Pass' | 'Slider Puzzle' | 'Proof-of-Work (PoW)' | '403 Forbidden (Khóa 5 phút)' = 'Invisible Pass';
   let simChallengeColor = 'success';
   let simPowDiff = null;
 
-  if (totalSimScore >= 70 || isBannedIp) {
+  if (isRateLimitBlocked) {
+    simChallengeType = '403 Forbidden (Khóa 5 phút)';
+    simChallengeColor = 'error';
+  } else if (totalSimScore >= 70 || isBannedIp) {
     simChallengeType = 'Proof-of-Work (PoW)';
     simChallengeColor = 'error';
     simPowDiff = totalSimScore >= 90 || isBannedIp ? 18 : totalSimScore >= 80 ? 14 : 12;
@@ -165,9 +186,9 @@ export const RiskEnginePage: React.FC = () => {
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title={<><SafetyCertificateOutlined /> 3. IP Reputation & Rate Limiting</>} variant="borderless" style={{ height: '100%' }}>
+          <Card title={<><SafetyCertificateOutlined /> 3. IP Reputation & Rate Limiting Đa Tầng (10s, 5m, 1h)</>} variant="borderless" style={{ height: '100%' }}>
             <Paragraph>
-              Học máy liên-site độc quyền của NhanHoaCaptcha kết hợp bảo vệ tần suất Redis O(1):
+              Học máy liên-site độc quyền kết hợp cơ chế kiểm tra vận tốc đa cửa sổ trượt trên Redis O(1) in-memory:
             </Paragraph>
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="Lịch sử vi phạm liên-site">
@@ -175,9 +196,22 @@ export const RiskEnginePage: React.FC = () => {
                 - Thất bại liên tiếp &ge; 10 lần ➔ <Tag color="error">Banned (+50 điểm)</Tag> <br/>
                 - Xuất hiện xấu trên &ge; 2 Site ➔ <Tag color="error">Nhân 1.5x điểm phạt</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Rate Limiting (Tần suất gọi /issue)">
-                - Gọi &gt; 25 req/10s (Spam dồn dập) ➔ <Tag color="error">+50 điểm</Tag> <br/>
-                - Gọi &gt; 10 req/10s ➔ <Tag color="warning">+25 điểm</Tag>
+              <Descriptions.Item label="Cửa sổ 10 Giây (Burst Attack)">
+                Phát hiện dồn tải / dội request tức thì: <br/>
+                - &gt; 20 req/10s ➔ <Tag color="error">+70 điểm (Chặn cứng 403)</Tag> <br/>
+                - &gt; 10 req/10s ➔ <Tag color="error">+45 điểm</Tag> | &gt; 4 req/10s ➔ <Tag color="warning">+25 điểm</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Cửa sổ 5 Phút (Low & Slow Bot)">
+                Phát hiện bot gửi rải rác 1-2 phút/lần (như case 13 req/10m): <br/>
+                - &gt; 15 req/5m ➔ <Tag color="error">+80 điểm</Tag> <br/>
+                - &gt; 6 req/5m ➔ <Tag color="error">+60 điểm (Chặn cứng 403 - Khóa 5 phút)</Tag> <br/>
+                - &gt; 3 req/5m ➔ <Tag color="warning">+35 điểm</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Cửa sổ 1 Giờ (Scraping kéo dài)">
+                - &gt; 60 req/1h ➔ <Tag color="error">+60 điểm (Chặn 403)</Tag> | &gt; 30 req/1h ➔ <Tag color="warning">+35 điểm</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Quy tắc Chặn Cứng 403 Forbidden">
+                Khi vượt ngưỡng Rate Limit, API <Text code>/issue</Text> lập tức ném <b>HTTP 403</b> kèm thông báo <i>"Thao tác quá nhanh, vui lòng thử lại sau"</i>, khóa IP 5 phút và chặn submit form ở Widget.
               </Descriptions.Item>
             </Descriptions>
           </Card>
@@ -210,7 +244,7 @@ export const RiskEnginePage: React.FC = () => {
         <Col span={24}>
           <Card title={<><ApiOutlined /> 5. Kết Quả & Phân Loại Thử Thách (Escalation Matrix)</>} variant="borderless">
             <Paragraph>
-              Tổng điểm từ <b>0 đến 100</b>. Hệ thống tự động phân cấp hành động tương ứng:
+              Hệ thống tự động phân cấp hành động theo <b>Điểm số Risk (0-100)</b> và <b>Tần suất Rate Limit</b>:
             </Paragraph>
             
             <Timeline
@@ -236,7 +270,7 @@ export const RiskEnginePage: React.FC = () => {
                       <br/>
                       <Tag color="warning">Trạng thái: Yêu cầu giải Slider (Kéo mảnh ghép Canvas)</Tag>
                       <br/>
-                      <Text type="secondary">Có dấu hiệu đáng ngờ. Widget hiển thị popup kéo mảnh ghép hỗ trợ cả chuột và màn hình cảm ứng để người dùng chứng minh.</Text>
+                      <Text type="secondary">Có dấu hiệu đáng ngờ hoặc IP dải Cloud/Tor. Widget hiển thị popup kéo mảnh ghép hỗ trợ cả chuột và màn hình cảm ứng để người dùng chứng minh.</Text>
                     </>
                   ),
                 },
@@ -248,7 +282,19 @@ export const RiskEnginePage: React.FC = () => {
                       <br/>
                       <Tag color="error">Trạng thái: Ép buộc giải Proof-of-Work (PoW Web Crypto)</Tag>
                       <br/>
-                      <Text type="secondary">Xác suất cao là Bot. Trình duyệt bắt buộc phải chạy thuật toán giải mã SHA-256 tìm Nonce ngầm để làm nghẽn CPU của Bot farm. (Score &ge; 90 độ khó PoW lên đến 18).</Text>
+                      <Text type="secondary">Xác suất cao là Bot/Spamhaus. Trình duyệt bắt buộc phải chạy thuật toán giải mã SHA-256 tìm Nonce ngầm để làm nghẽn CPU của Bot farm. (Score &ge; 90 độ khó PoW lên đến 18).</Text>
+                    </>
+                  ),
+                },
+                {
+                  color: '#780a0a',
+                  children: (
+                    <>
+                      <Text strong style={{ fontSize: 16 }}>Vượt Ngưỡng Rate Limit (SPAM / FLOODING)</Text>
+                      <br/>
+                      <Tag color="#780a0a" style={{ color: '#fff' }}>Trạng thái: Chặn Cứng 403 Forbidden (Khóa 5 phút)</Tag>
+                      <br/>
+                      <Text type="secondary">Khi IP gửi &gt; 6 lần/5m, &gt; 20 lần/10s hoặc &gt; 60 lần/1h: API từ chối cấp token, Widget khóa form submit và báo "Thao tác quá nhanh, vui lòng thử lại sau".</Text>
                     </>
                   ),
                 },
@@ -316,6 +362,25 @@ export const RiskEnginePage: React.FC = () => {
 
                   <Divider style={{ margin: '8px 0' }} />
 
+                  {/* Rate Limiting Controls */}
+                  <Title level={5} style={{ margin: '4px 0' }}>Tần Suất Request Đa Tầng (Rate Limiting)</Title>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    <div>
+                      <Text style={{ fontSize: 12 }}>10s window: <b>{simRate10s} reqs</b></Text>
+                      <Slider min={1} max={30} value={simRate10s} onChange={setSimRate10s} />
+                    </div>
+                    <div>
+                      <Text style={{ fontSize: 12 }}>5m window: <b>{simRate5m} reqs</b></Text>
+                      <Slider min={1} max={25} value={simRate5m} onChange={setSimRate5m} />
+                    </div>
+                    <div>
+                      <Text style={{ fontSize: 12 }}>1h window: <b>{simRate1h} reqs</b></Text>
+                      <Slider min={1} max={100} value={simRate1h} onChange={setSimRate1h} />
+                    </div>
+                  </div>
+
+                  <Divider style={{ margin: '8px 0' }} />
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text>Nguồn Threat Intel IP:</Text>
                     <Select 
@@ -369,7 +434,7 @@ export const RiskEnginePage: React.FC = () => {
                     <Title level={5} style={{ marginTop: 0 }}>Kết Quả Đánh Giá Realtime</Title>
                     
                     <div style={{ textAlign: 'center', margin: '20px 0' }}>
-                      <div style={{ fontSize: 44, fontWeight: 800, color: totalSimScore >= 70 ? '#ea5455' : totalSimScore >= 30 ? '#ff9f43' : '#28c76f' }}>
+                      <div style={{ fontSize: 44, fontWeight: 800, color: isRateLimitBlocked ? '#780a0a' : totalSimScore >= 70 ? '#ea5455' : totalSimScore >= 30 ? '#ff9f43' : '#28c76f' }}>
                         {totalSimScore}
                         <span style={{ fontSize: 20, color: '#94a3b8' }}>/100</span>
                       </div>
@@ -387,6 +452,10 @@ export const RiskEnginePage: React.FC = () => {
                         <Text strong style={{ color: clientBehaviorScore > 0 ? '#ea5455' : '#28c76f' }}>+{clientBehaviorScore}</Text>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Text type="secondary">Rate Limiting Score:</Text>
+                        <Text strong style={{ color: rateLimitScore > 0 ? '#ea5455' : '#28c76f' }}>+{rateLimitScore}</Text>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Text type="secondary">Threat Intel Score:</Text>
                         <Text strong style={{ color: threatIntelScore > 0 ? '#ea5455' : '#28c76f' }}>+{threatIntelScore}</Text>
                       </div>
@@ -394,6 +463,12 @@ export const RiskEnginePage: React.FC = () => {
                         <Text type="secondary">IP Reputation Score:</Text>
                         <Text strong style={{ color: reputationScore > 0 ? '#ea5455' : '#28c76f' }}>+{reputationScore}</Text>
                       </div>
+                      {isRateLimitBlocked && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Text type="danger">Khóa Rate Limit:</Text>
+                          <Tag color="error">403 FORBIDDEN (5 phút)</Tag>
+                        </div>
+                      )}
                       {isBannedIp && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <Text type="danger">Trạng thái IP:</Text>
@@ -404,8 +479,8 @@ export const RiskEnginePage: React.FC = () => {
                   </div>
 
                   <Alert 
-                    message={totalSimScore < 30 ? "✓ Người dùng thật - Trải nghiệm tức thì" : totalSimScore < 70 ? "⚠ Nghi ngờ - Yêu cầu giải kéo hình" : "⛔ Nguy cơ Bot cao - Bắt buộc chạy PoW"}
-                    type={totalSimScore < 30 ? "success" : totalSimScore < 70 ? "warning" : "error"}
+                    message={isRateLimitBlocked ? "⛔ Tần suất quá nhanh - Khóa 403 Forbidden 5 phút" : totalSimScore < 30 ? "✓ Người dùng thật - Trải nghiệm tức thì" : totalSimScore < 70 ? "⚠ Nghi ngờ - Yêu cầu giải kéo hình" : "⛔ Nguy cơ Bot cao - Bắt buộc chạy PoW"}
+                    type={isRateLimitBlocked || totalSimScore >= 70 ? "error" : totalSimScore < 30 ? "success" : "warning"}
                     showIcon
                     style={{ marginTop: 16 }}
                   />

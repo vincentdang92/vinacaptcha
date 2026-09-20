@@ -52,10 +52,10 @@
 - **One-time-use**: lưu token id vào Redis với TTL = expiry; verify xong thì xoá/đánh dấu used — chống replay.
 - Session binding: hash(IP + User-Agent) gắn vào token, so sánh khi verify (constant-time compare, tránh timing attack).
 
-### 3.3 Risk Engine (risk-based, giống reCAPTCHA v3)
-- Input: tốc độ request từ IP, honeypot bị điền hay không, User-Agent bất thường, thời gian điền form quá nhanh.
-- Output: score → quyết định `none` (qua luôn) / `slider` / `pow` (tăng độ khó PoW thích ứng theo tải hệ thống).
-- Fail-mode: mặc định **fail-closed** khi backend quá tải (an toàn hơn), nhưng có config để đổi sang fail-open nếu ảnh hưởng UX quá nhiều — quyết định này cần xác nhận trước khi launch.
+### 3.3 Risk Engine (risk-based, Zero-friction Telemetry)
+- Input: Telemetry thụ động client (honeypot, webdriver, virtual GPU, time_on_page, mouse/keys, screen), Threat Intel IP ranges (Spamhaus, Tor, Datacenter), Multi-site IP reputation, và Rate Limiting đa tầng Redis (10s, 5m, 1h).
+- Output: Score (0-100) → quyết định `none` (Invisible pass < 30) / `slider` (30-69) / `pow` (≥ 70, độ khó 12-18 bits) / `403 Forbidden` (vượt ngưỡng Rate Limit > 6 reqs/5m hoặc > 20 reqs/10s, khóa 5 phút).
+- Fail-mode: Mặc định **fail-closed** khi phát hiện spam dồn dập hoặc bot rate limit exceeded (ném 403 Forbidden, widget dừng submit form), bảo vệ tuyệt đối backend và tài nguyên của khách hàng. Chi tiết đầy đủ xem tại `backend/src/risk-engine/README.md`.
 
 ### 3.4 Hạ tầng
 - **Framework: NestJS với `platform-fastify` adapter** (chốt, không dùng Express adapter) — lý do: endpoint `/issue`, `/verify` là hot path cần xử lý concurrent cao (theo kế hoạch load test mục 5, tới 5,000 concurrent), Fastify cho throughput cao hơn Express đáng kể ở tầng routing/JSON serialization, trong khi vẫn giữ được cấu trúc module/DI của Nest cho risk engine, cron job, và tách route `/v1/*` public khỏi `/admin/v1/*` admin.
