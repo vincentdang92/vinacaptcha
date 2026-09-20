@@ -90,59 +90,7 @@ export class QuotaSyncJob {
         }
       }
 
-      // ==========================================================
-      // 2. TÍNH TOÁN & CẬP NHẬT STATS CACHE TRÊN REDIS (5 PHÚT / LẦN)
-      // ==========================================================
-      const totalSitesRes = await this.dataSource.query('SELECT COUNT(*) as count FROM sites');
-      const activeSitesRes = await this.dataSource.query(`SELECT COUNT(*) as count FROM sites WHERE status = 'active'`);
-      const totalRequestsRes = await this.dataSource.query('SELECT COUNT(*) as count FROM verification_logs');
-      const threatIntelRes = await this.dataSource.query('SELECT COUNT(*) as count FROM threat_intel_ranges');
-      const bannedIpsRes = await this.dataSource.query('SELECT COUNT(*) as count FROM ip_reputation WHERE fail_count > 10');
-
-      const recentLogs = await this.dataSource.query(`
-        SELECT 
-          vl.ip,
-          vl.challenge_type,
-          vl.result,
-          vl.risk_score,
-          vl.risk_breakdown,
-          vl.created_at,
-          s.primary_domain AS site_domain
-        FROM verification_logs vl
-        LEFT JOIN sites s ON s.id = vl.site_id
-        ORDER BY vl.created_at DESC 
-        LIMIT 10
-      `);
-
-      const chartData = await this.dataSource.query(`
-        SELECT DATE(created_at) as date, 
-               SUM(CASE WHEN result = 'pass' THEN 1 ELSE 0 END) as passed,
-               SUM(CASE WHEN result = 'fail' THEN 1 ELSE 0 END) as failed
-        FROM verification_logs 
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-        LIMIT 7
-      `);
-
-      const formattedChartData = chartData.map((item: any) => ({
-        date: item.date,
-        passed: parseInt(item.passed, 10) || 0,
-        failed: parseInt(item.failed, 10) || 0,
-      }));
-
-      const statsData = {
-        totalSites: parseInt(totalSitesRes[0].count, 10),
-        activeSites: parseInt(activeSitesRes[0].count, 10),
-        totalRequests: parseInt(totalRequestsRes[0].count, 10),
-        knowledgeBaseIps: parseInt(threatIntelRes[0].count, 10),
-        bannedIps: parseInt(bannedIpsRes[0].count, 10),
-        recentLogs,
-        chartData: formattedChartData,
-        last_synced_at: new Date().toISOString(),
-      };
-
-      await this.redisService.setDashboardStatsCache(statsData, 300); // 5 phút TTL
-      this.logger.log('✅ [Cron 5-min] Hoàn tất cập nhật Request Tracking & Dashboard Cache trên Redis.');
+      this.logger.log('✅ [Cron 5-min] Hoàn tất kiểm tra và đồng bộ hạn mức Quota tài khoản.');
     } catch (err) {
       this.logger.error('❌ [Cron] Lỗi khi chạy QuotaSyncJob:', err);
     }

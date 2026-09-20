@@ -73,7 +73,7 @@ export class AdminService implements OnModuleInit {
 
       const chartData = await this.dataSource.query(`
         WITH day_series AS (
-          SELECT (CURRENT_DATE - (n || ' days')::interval)::date AS date
+          SELECT ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - (n || ' days')::interval)::date AS date
           FROM generate_series(6, 0, -1) AS n
         )
         SELECT 
@@ -204,7 +204,7 @@ export class AdminService implements OnModuleInit {
     // Stats for Chart (grouped by date 7 ngày gần nhất tính đến hôm nay)
     const chartData = await this.dataSource.query(`
       WITH day_series AS (
-        SELECT (CURRENT_DATE - (n || ' days')::interval)::date AS date
+        SELECT ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - (n || ' days')::interval)::date AS date
         FROM generate_series(6, 0, -1) AS n
       )
       SELECT 

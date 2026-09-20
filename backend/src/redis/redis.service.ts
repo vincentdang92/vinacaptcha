@@ -14,6 +14,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.configService.get<string>('REDIS_URL') ||
       'redis://redis:6379';
     this.client = new Redis(redisUrl);
+    // Xóa cache dashboard stats khi khởi động lại để đảm bảo dữ liệu mới nhất
+    this.client.del('stats:dashboard:cache').catch(() => {});
   }
 
   onModuleDestroy() {
