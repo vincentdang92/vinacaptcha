@@ -289,4 +289,97 @@ describe('AdminService', () => {
       expect(intel.verification_stats.total_requests).toBe(5);
     });
   });
+
+  describe('getDashboardStats', () => {
+    it('should return cached stats if present for admin', async () => {
+      const cached = {
+        totalSites: 5,
+        activeSites: 4,
+        totalRequests: 100,
+        knowledgeBaseIps: 10,
+        bannedIps: 2,
+        recentLogs: [],
+        chartData: [{ date: '2026-09-20', passed: 90, failed: 10 }],
+        marketingStats: {
+          utmCampaigns: [],
+          deviceBreakdown: { mobile: 2, desktop: 3, touchScreenPct: 40 },
+          userEngagement: { avgTimeOnPageMs: 1500, avgScrollDepthPct: 80, pasteDetectedCount: 0 },
+        },
+        last_synced_at: '2026-09-20T10:00:00.000Z',
+      };
+      mockRedisService.getDashboardStatsCache = () => Promise.resolve(cached as any);
+
+      const stats = await service.getDashboardStats();
+      expect(stats).toEqual(cached);
+    });
+
+    it('should query DB and calculate continuous 7-day stats and marketing metrics when cache is miss', async () => {
+      mockRedisService.getDashboardStatsCache = () => Promise.resolve(null);
+      let setCacheCalled = false;
+      mockRedisService.setDashboardStatsCache = () => {
+        setCacheCalled = true;
+        return Promise.resolve();
+      };
+
+      mockDataSource.query = (q: string) => {
+        if (q.includes('COUNT(*) as count FROM sites WHERE status = \'active\'')) {
+          return Promise.resolve([{ count: '3' }]);
+        }
+        if (q.includes('COUNT(*) as count FROM sites')) {
+          return Promise.resolve([{ count: '5' }]);
+        }
+        if (q.includes('COUNT(*) as count FROM verification_logs')) {
+          return Promise.resolve([{ count: '150' }]);
+        }
+        if (q.includes('COUNT(*) as count FROM threat_intel_ranges')) {
+          return Promise.resolve([{ count: '20' }]);
+        }
+        if (q.includes('COUNT(*) as count FROM ip_reputation')) {
+          return Promise.resolve([{ count: '1' }]);
+        }
+        if (q.includes('day_series')) {
+          return Promise.resolve([
+            { date: '2026-09-14', passed: 10, failed: 2 },
+            { date: '2026-09-15', passed: 12, failed: 1 },
+            { date: '2026-09-16', passed: 15, failed: 0 },
+            { date: '2026-09-17', passed: 20, failed: 3 },
+            { date: '2026-09-18', passed: 18, failed: 2 },
+            { date: '2026-09-19', passed: 25, failed: 1 },
+            { date: '2026-09-20', passed: 30, failed: 4 },
+          ]);
+        }
+        if (q.includes('utm_campaign')) {
+          return Promise.resolve([
+            { campaign: 'summer_promo', source: 'facebook', total: '25', pass_count: '24', fail_count: '1' },
+          ]);
+        }
+        if (q.includes('total_samples')) {
+          return Promise.resolve([
+            {
+              total_samples: '50',
+              touch_count: '30',
+              mobile_count: '25',
+              avg_time: '2400',
+              avg_scroll: '65',
+              paste_count: '5',
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      };
+
+      const stats = await service.getDashboardStats();
+      expect(stats.totalSites).toBe(5);
+      expect(stats.activeSites).toBe(3);
+      expect(stats.totalRequests).toBe(150);
+      expect(stats.chartData.length).toBe(7);
+      expect(stats.chartData[6].date).toBe('2026-09-20');
+      expect(stats.chartData[6].passed).toBe(30);
+      expect(stats.marketingStats?.utmCampaigns[0].campaign).toBe('summer_promo');
+      expect(stats.marketingStats?.deviceBreakdown.mobile).toBe(25);
+      expect(stats.marketingStats?.deviceBreakdown.desktop).toBe(25);
+      expect(stats.marketingStats?.deviceBreakdown.touchScreenPct).toBe(60);
+      expect(setCacheCalled).toBe(true);
+    });
+  });
 });

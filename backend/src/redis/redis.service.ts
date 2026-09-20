@@ -159,7 +159,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Cache Dashboard Statistics trên Redis (TTL 5 phút)
+   * Cache Dashboard Statistics trên Redis (TTL 3 giây - tối ưu Realtime & chống DDoS)
    */
   async getDashboardStatsCache(): Promise<any | null> {
     const cached = await this.client.get('stats:dashboard:cache');
@@ -171,7 +171,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async setDashboardStatsCache(data: any, ttlSeconds = 300): Promise<void> {
+  async setDashboardStatsCache(data: any, ttlSeconds = 3): Promise<void> {
     await this.client.setex('stats:dashboard:cache', ttlSeconds, JSON.stringify(data));
   }
 

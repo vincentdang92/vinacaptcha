@@ -72,15 +72,20 @@ export class AdminService implements OnModuleInit {
       `, [accountId]);
 
       const chartData = await this.dataSource.query(`
-        SELECT DATE(vl.created_at) as date, 
-               SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END) as passed,
-               SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END) as failed
-        FROM verification_logs vl
-        JOIN sites s ON s.id = vl.site_id
-        WHERE s.account_id = $1
-        GROUP BY DATE(vl.created_at)
-        ORDER BY date ASC
-        LIMIT 7
+        WITH day_series AS (
+          SELECT (CURRENT_DATE - (n || ' days')::interval)::date AS date
+          FROM generate_series(6, 0, -1) AS n
+        )
+        SELECT 
+          TO_CHAR(ds.date, 'YYYY-MM-DD') AS date,
+          COALESCE(SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END), 0)::int AS passed,
+          COALESCE(SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END), 0)::int AS failed
+        FROM day_series ds
+        LEFT JOIN verification_logs vl 
+          ON (vl.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = ds.date
+          AND vl.site_id IN (SELECT id FROM sites WHERE account_id = $1)
+        GROUP BY ds.date
+        ORDER BY ds.date ASC
       `, [accountId]);
 
       const formattedChartData = chartData.map((item: any) => ({
@@ -196,15 +201,21 @@ export class AdminService implements OnModuleInit {
       LIMIT 10
     `);
 
-    // Stats for Chart (grouped by date)
+    // Stats for Chart (grouped by date 7 ngày gần nhất tính đến hôm nay)
     const chartData = await this.dataSource.query(`
-      SELECT DATE(created_at) as date, 
-             SUM(CASE WHEN result = 'pass' THEN 1 ELSE 0 END) as passed,
-             SUM(CASE WHEN result = 'fail' THEN 1 ELSE 0 END) as failed
-      FROM verification_logs 
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
-      LIMIT 7
+      WITH day_series AS (
+        SELECT (CURRENT_DATE - (n || ' days')::interval)::date AS date
+        FROM generate_series(6, 0, -1) AS n
+      )
+      SELECT 
+        TO_CHAR(ds.date, 'YYYY-MM-DD') AS date,
+        COALESCE(SUM(CASE WHEN vl.result = 'pass' THEN 1 ELSE 0 END), 0)::int AS passed,
+        COALESCE(SUM(CASE WHEN vl.result = 'fail' THEN 1 ELSE 0 END), 0)::int AS failed
+      FROM day_series ds
+      LEFT JOIN verification_logs vl 
+        ON (vl.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = ds.date
+      GROUP BY ds.date
+      ORDER BY ds.date ASC
     `);
 
     const formattedChartData = chartData.map((item: any) => ({
@@ -288,8 +299,8 @@ export class AdminService implements OnModuleInit {
       last_synced_at: new Date().toISOString(),
     };
 
-    // Lưu vào Redis cache với TTL 300s (5 phút)
-    await this.redisService.setDashboardStatsCache(result, 300);
+    // Lưu vào Redis cache với TTL 3s (đảm bảo tính realtime cho chu kỳ polling 5s)
+    await this.redisService.setDashboardStatsCache(result, 3);
 
     return result;
   }

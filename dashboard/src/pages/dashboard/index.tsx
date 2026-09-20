@@ -335,9 +335,29 @@ export const DashboardPage = () => {
                         </div>
 
                         {/* X-axis label */}
-                        <Text type="secondary" style={{ fontSize: 12, marginTop: 8, whiteSpace: "nowrap" }}>
-                          {day?.date ? new Date(day.date).toLocaleDateString("vi-VN", { month: "numeric", day: "numeric" }) : ""}
-                        </Text>
+                        {(() => {
+                          const isToday = day?.date === dayjs().format("YYYY-MM-DD");
+                          return (
+                            <div style={{ textAlign: "center", marginTop: 8 }}>
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: isToday ? 700 : 400,
+                                  color: isToday ? "#1890ff" : undefined,
+                                  display: "block",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {day?.date ? dayjs(day.date).format("DD/MM") : ""}
+                              </Text>
+                              {isToday && (
+                                <Tag color="blue" style={{ fontSize: 9, lineHeight: "14px", padding: "0 4px", margin: "2px 0 0" }}>
+                                  Hôm nay
+                                </Tag>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
