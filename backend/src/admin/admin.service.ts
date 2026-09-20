@@ -155,6 +155,50 @@ export class AdminService implements OnModuleInit {
         }
       } catch {}
 
+      let riskTriggers: Array<{ key: string; label: string; count: number; percentage: number; color: string; icon: string }> = [];
+      try {
+        const triggersQuery = await this.dataSource.query(`
+          SELECT 
+            COUNT(*) as total_evaluated,
+            SUM(CASE WHEN (vl.risk_breakdown->'isRateLimitExceeded')::boolean = true OR (vl.risk_breakdown->>'rateLimitScore')::int > 0 OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_5M_EXCEEDED' OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_10S_BURST' THEN 1 ELSE 0 END) as rate_limit_count,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'webdriver')::boolean = true OR vl.risk_breakdown->'flags' ? 'WEBDRIVER_AUTOMATION' THEN 1 ELSE 0 END) as webdriver_count,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'honeypot_filled')::boolean = true OR vl.risk_breakdown->'flags' ? 'HONEYPOT_FILLED' THEN 1 ELSE 0 END) as honeypot_count,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%swiftshader%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%llvmpipe%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%mesa%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%virtualbox%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%vmware%' OR vl.risk_breakdown->'flags' ? 'VIRTUAL_GPU_DETECTED' THEN 1 ELSE 0 END) as virtual_gpu_count,
+            SUM(CASE WHEN vl.risk_breakdown->>'threatCategory' IS NOT NULL OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_ATTACK' OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_DATACENTER' THEN 1 ELSE 0 END) as threat_intel_count,
+            SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'execution_count')::int > 1 AND (vl.risk_breakdown->'clientSignals'->>'mouse_moves')::int = 0 OR vl.risk_breakdown->'flags' ? 'REPEATED_SUBMIT_NO_MOTION' THEN 1 ELSE 0 END) as anti_automation_count,
+            SUM(CASE WHEN (vl.risk_breakdown->>'isBannedIp')::boolean = true OR (vl.risk_breakdown->>'reputationScore')::int >= 35 OR vl.risk_breakdown->'flags' ? 'IP_REPUTATION_BANNED' THEN 1 ELSE 0 END) as ip_reputation_count
+          FROM verification_logs vl
+          JOIN sites s ON s.id = vl.site_id
+          WHERE s.account_id = $1 AND vl.risk_breakdown IS NOT NULL
+        `, [accountId]);
+
+        if (triggersQuery && triggersQuery.length > 0) {
+          const row = triggersQuery[0];
+          const totalBot = (parseInt(row.rate_limit_count, 10) || 0) +
+                           (parseInt(row.webdriver_count, 10) || 0) +
+                           (parseInt(row.honeypot_count, 10) || 0) +
+                           (parseInt(row.virtual_gpu_count, 10) || 0) +
+                           (parseInt(row.threat_intel_count, 10) || 0) +
+                           (parseInt(row.anti_automation_count, 10) || 0) +
+                           (parseInt(row.ip_reputation_count, 10) || 0) || 1;
+
+          const rawList = [
+            { key: 'rate_limit', label: 'Tần Suất Quá Nhanh (Rate Limit 403)', count: parseInt(row.rate_limit_count, 10) || 0, color: '#ea5455', icon: 'ThunderboltOutlined' },
+            { key: 'webdriver', label: 'Trình Duyệt Tự Động (Webdriver Bot)', count: parseInt(row.webdriver_count, 10) || 0, color: '#7367f0', icon: 'RobotOutlined' },
+            { key: 'honeypot', label: 'Dính Bẫy Ẩn (Honeypot Triggered)', count: parseInt(row.honeypot_count, 10) || 0, color: '#e83e8c', icon: 'BugOutlined' },
+            { key: 'virtual_gpu', label: 'GPU Máy Ảo (Headless Server)', count: parseInt(row.virtual_gpu_count, 10) || 0, color: '#ff9f43', icon: 'LaptopOutlined' },
+            { key: 'threat_intel', label: 'Dải IP Độc Hại / Datacenter', count: parseInt(row.threat_intel_count, 10) || 0, color: '#00cfe8', icon: 'GlobalOutlined' },
+            { key: 'anti_automation', label: 'Submit Lặp Không Tương Tác', count: parseInt(row.anti_automation_count, 10) || 0, color: '#28c76f', icon: 'ReloadOutlined' },
+            { key: 'ip_reputation', label: 'IP Có Tiền Sử Vi Phạm', count: parseInt(row.ip_reputation_count, 10) || 0, color: '#fd7e14', icon: 'SafetyCertificateOutlined' },
+          ];
+
+          riskTriggers = rawList.map(item => ({
+            ...item,
+            percentage: Math.round((item.count / totalBot) * 100),
+          })).filter(item => item.count > 0);
+        }
+      } catch {}
+
       return {
         totalSites: parseInt(totalSitesRes[0]?.count || '0', 10),
         activeSites: parseInt(activeSitesRes[0]?.count || '0', 10),
@@ -168,6 +212,7 @@ export class AdminService implements OnModuleInit {
           deviceBreakdown: topDevices,
           userEngagement: avgMetrics,
         },
+        riskTriggers,
         last_synced_at: new Date().toISOString(),
       };
     }
@@ -283,6 +328,49 @@ export class AdminService implements OnModuleInit {
       }
     } catch {}
 
+    let riskTriggers: Array<{ key: string; label: string; count: number; percentage: number; color: string; icon: string }> = [];
+    try {
+      const triggersQuery = await this.dataSource.query(`
+        SELECT 
+          COUNT(*) as total_evaluated,
+          SUM(CASE WHEN (vl.risk_breakdown->'isRateLimitExceeded')::boolean = true OR (vl.risk_breakdown->>'rateLimitScore')::int > 0 OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_5M_EXCEEDED' OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_10S_BURST' THEN 1 ELSE 0 END) as rate_limit_count,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'webdriver')::boolean = true OR vl.risk_breakdown->'flags' ? 'WEBDRIVER_AUTOMATION' THEN 1 ELSE 0 END) as webdriver_count,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'honeypot_filled')::boolean = true OR vl.risk_breakdown->'flags' ? 'HONEYPOT_FILLED' THEN 1 ELSE 0 END) as honeypot_count,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%swiftshader%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%llvmpipe%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%mesa%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%virtualbox%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%vmware%' OR vl.risk_breakdown->'flags' ? 'VIRTUAL_GPU_DETECTED' THEN 1 ELSE 0 END) as virtual_gpu_count,
+          SUM(CASE WHEN vl.risk_breakdown->>'threatCategory' IS NOT NULL OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_ATTACK' OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_DATACENTER' THEN 1 ELSE 0 END) as threat_intel_count,
+          SUM(CASE WHEN (vl.risk_breakdown->'clientSignals'->>'execution_count')::int > 1 AND (vl.risk_breakdown->'clientSignals'->>'mouse_moves')::int = 0 OR vl.risk_breakdown->'flags' ? 'REPEATED_SUBMIT_NO_MOTION' THEN 1 ELSE 0 END) as anti_automation_count,
+          SUM(CASE WHEN (vl.risk_breakdown->>'isBannedIp')::boolean = true OR (vl.risk_breakdown->>'reputationScore')::int >= 35 OR vl.risk_breakdown->'flags' ? 'IP_REPUTATION_BANNED' THEN 1 ELSE 0 END) as ip_reputation_count
+        FROM verification_logs vl
+        WHERE vl.risk_breakdown IS NOT NULL
+      `);
+
+      if (triggersQuery && triggersQuery.length > 0) {
+        const row = triggersQuery[0];
+        const totalBot = (parseInt(row.rate_limit_count, 10) || 0) +
+                         (parseInt(row.webdriver_count, 10) || 0) +
+                         (parseInt(row.honeypot_count, 10) || 0) +
+                         (parseInt(row.virtual_gpu_count, 10) || 0) +
+                         (parseInt(row.threat_intel_count, 10) || 0) +
+                         (parseInt(row.anti_automation_count, 10) || 0) +
+                         (parseInt(row.ip_reputation_count, 10) || 0) || 1;
+
+        const rawList = [
+          { key: 'rate_limit', label: 'Tần Suất Quá Nhanh (Rate Limit 403)', count: parseInt(row.rate_limit_count, 10) || 0, color: '#ea5455', icon: 'ThunderboltOutlined' },
+          { key: 'webdriver', label: 'Trình Duyệt Tự Động (Webdriver Bot)', count: parseInt(row.webdriver_count, 10) || 0, color: '#7367f0', icon: 'RobotOutlined' },
+          { key: 'honeypot', label: 'Dính Bẫy Ẩn (Honeypot Triggered)', count: parseInt(row.honeypot_count, 10) || 0, color: '#e83e8c', icon: 'BugOutlined' },
+          { key: 'virtual_gpu', label: 'GPU Máy Ảo (Headless Server)', count: parseInt(row.virtual_gpu_count, 10) || 0, color: '#ff9f43', icon: 'LaptopOutlined' },
+          { key: 'threat_intel', label: 'Dải IP Độc Hại / Datacenter', count: parseInt(row.threat_intel_count, 10) || 0, color: '#00cfe8', icon: 'GlobalOutlined' },
+          { key: 'anti_automation', label: 'Submit Lặp Không Tương Tác', count: parseInt(row.anti_automation_count, 10) || 0, color: '#28c76f', icon: 'ReloadOutlined' },
+          { key: 'ip_reputation', label: 'IP Có Tiền Sử Vi Phạm', count: parseInt(row.ip_reputation_count, 10) || 0, color: '#fd7e14', icon: 'SafetyCertificateOutlined' },
+        ];
+
+        riskTriggers = rawList.map(item => ({
+          ...item,
+          percentage: Math.round((item.count / totalBot) * 100),
+        })).filter(item => item.count > 0);
+      }
+    } catch {}
+
     const result = {
       totalSites: parseInt(totalSitesRes[0]?.count || '0', 10),
       activeSites: parseInt(activeSitesRes[0]?.count || '0', 10),
@@ -296,6 +384,7 @@ export class AdminService implements OnModuleInit {
         deviceBreakdown: topDevices,
         userEngagement: avgMetrics,
       },
+      riskTriggers,
       last_synced_at: new Date().toISOString(),
     };
 
@@ -314,6 +403,7 @@ export class AdminService implements OnModuleInit {
       endDate?: string;
       result?: string;
       siteId?: string;
+      riskFactor?: string;
       page?: number | string;
       limit?: number | string;
     },
@@ -366,6 +456,28 @@ export class AdminService implements OnModuleInit {
     if (params.result && (params.result === 'pass' || params.result === 'fail')) {
       whereConditions.push(`vl.result = $${pIdx++}`);
       queryParams.push(params.result);
+    }
+
+    // 6. Lọc theo tác nhân rủi ro (riskFactor)
+    if (params.riskFactor && params.riskFactor !== 'all') {
+      const rf = params.riskFactor;
+      if (rf === 'rate_limit') {
+        whereConditions.push(`((vl.risk_breakdown->'isRateLimitExceeded')::boolean = true OR (vl.risk_breakdown->>'rateLimitScore')::int > 0 OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_5M_EXCEEDED' OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_10S_BURST' OR vl.risk_breakdown->'flags' ? 'RATE_LIMIT_1H_FLOOD')`);
+      } else if (rf === 'webdriver') {
+        whereConditions.push(`((vl.risk_breakdown->'clientSignals'->>'webdriver')::boolean = true OR vl.risk_breakdown->'flags' ? 'WEBDRIVER_AUTOMATION')`);
+      } else if (rf === 'honeypot') {
+        whereConditions.push(`((vl.risk_breakdown->'clientSignals'->>'honeypot_filled')::boolean = true OR vl.risk_breakdown->'flags' ? 'HONEYPOT_FILLED')`);
+      } else if (rf === 'virtual_gpu') {
+        whereConditions.push(`((vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%swiftshader%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%llvmpipe%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%mesa%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%virtualbox%' OR (vl.risk_breakdown->'clientSignals'->>'gpu_renderer') ILIKE '%vmware%' OR vl.risk_breakdown->'flags' ? 'VIRTUAL_GPU_DETECTED')`);
+      } else if (rf === 'threat_intel') {
+        whereConditions.push(`(vl.risk_breakdown->>'threatCategory' IS NOT NULL OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_ATTACK' OR vl.risk_breakdown->'flags' ? 'THREAT_INTEL_DATACENTER')`);
+      } else if (rf === 'anti_automation') {
+        whereConditions.push(`(((vl.risk_breakdown->'clientSignals'->>'execution_count')::int > 1 AND (vl.risk_breakdown->'clientSignals'->>'mouse_moves')::int = 0) OR vl.risk_breakdown->'flags' ? 'REPEATED_SUBMIT_NO_MOTION' OR vl.risk_breakdown->'flags' ? 'REPEATED_SUBMIT_RAPID')`);
+      } else if (rf === 'utm') {
+        whereConditions.push(`(vl.risk_breakdown->'clientSignals'->>'utm_campaign' IS NOT NULL)`);
+      } else if (rf === 'banned_ip') {
+        whereConditions.push(`((vl.risk_breakdown->>'isBannedIp')::boolean = true OR vl.risk_breakdown->'flags' ? 'IP_REPUTATION_BANNED')`);
+      }
     }
 
     const whereClause = whereConditions.join(' AND ');

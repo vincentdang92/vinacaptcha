@@ -205,6 +205,36 @@ describe('RiskEngineService', () => {
       expect(result.riskScore).toBe(100);
       expect(result.breakdown.isBannedIp).toBe(true);
       expect(result.breakdown.reputationScore).toBe(100);
+      expect(result.breakdown.flags).toContain('IP_REPUTATION_BANNED');
+    });
+
+    it('should generate accurate risk breakdown flags for combined bot signals', async () => {
+      mockThreatIntelService.checkIp.mockResolvedValue({ matched: true, category: 'attacks' });
+      mockReputationService.checkIpReputation.mockResolvedValue({ hasRecord: false });
+      mockRedisService.incrementRateLimit
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(12) // 5m rate limit exceeded
+        .mockResolvedValueOnce(12);
+
+      const signals: ClientSignalsDto = {
+        webdriver: true,
+        gpu_renderer: 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)',
+        canvas_fingerprint: 'abcd123',
+        time_on_page_ms: 400,
+        mouse_moves: 0,
+        mouse_clicks: 0,
+        key_strokes: 0,
+      };
+
+      const result = await service.evaluateRisk('1.2.3.4', signals, true);
+
+      expect(result.breakdown.flags).toContain('RATE_LIMIT_5M_EXCEEDED');
+      expect(result.breakdown.flags).toContain('THREAT_INTEL_ATTACK');
+      expect(result.breakdown.flags).toContain('WEBDRIVER_AUTOMATION');
+      expect(result.breakdown.flags).toContain('HONEYPOT_FILLED');
+      expect(result.breakdown.flags).toContain('VIRTUAL_GPU_DETECTED');
+      expect(result.breakdown.flags).toContain('FAST_SUBMIT_SUBSECOND');
+      expect(result.breakdown.flags).toContain('PHYSICAL_INPUT_MISSING');
     });
   });
 });

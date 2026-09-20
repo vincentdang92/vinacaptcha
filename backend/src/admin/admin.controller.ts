@@ -114,11 +114,12 @@ export class AdminController {
     @Query('endDate') endDate?: string,
     @Query('result') result?: string,
     @Query('siteId') siteId?: string,
+    @Query('riskFactor') riskFactor?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.adminService.getVerificationLogs(
-      { ip, startDate, endDate, result, siteId, page, limit },
+      { ip, startDate, endDate, result, siteId, riskFactor, page, limit },
       req.account?.id,
       req.account?.role,
     );

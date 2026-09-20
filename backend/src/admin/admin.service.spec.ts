@@ -365,6 +365,20 @@ describe('AdminService', () => {
             },
           ]);
         }
+        if (q.includes('total_evaluated')) {
+          return Promise.resolve([
+            {
+              total_evaluated: '50',
+              rate_limit_count: '10',
+              webdriver_count: '5',
+              honeypot_count: '2',
+              virtual_gpu_count: '3',
+              threat_intel_count: '1',
+              anti_automation_count: '4',
+              ip_reputation_count: '2',
+            },
+          ]);
+        }
         return Promise.resolve([]);
       };
 
@@ -379,7 +393,42 @@ describe('AdminService', () => {
       expect(stats.marketingStats?.deviceBreakdown.mobile).toBe(25);
       expect(stats.marketingStats?.deviceBreakdown.desktop).toBe(25);
       expect(stats.marketingStats?.deviceBreakdown.touchScreenPct).toBe(60);
+      expect(stats.riskTriggers).toBeDefined();
+      expect(stats.riskTriggers.length).toBeGreaterThan(0);
+      expect(stats.riskTriggers.find((t: any) => t.key === 'rate_limit')?.count).toBe(10);
       expect(setCacheCalled).toBe(true);
+    });
+  });
+
+  describe('getVerificationLogs', () => {
+    it('should query logs with riskFactor filter and pagination', async () => {
+      let executedQuery = '';
+      mockDataSource.query = (q: string) => {
+        executedQuery = q;
+        if (q.includes('COUNT(*) as total')) {
+          return Promise.resolve([{ total: '1', pass_count: '0', fail_count: '1', avg_risk_score: '85.0' }]);
+        }
+        return Promise.resolve([
+          {
+            id: 'log-1',
+            ip: '113.190.1.1',
+            challenge_type: 'slider',
+            result: 'fail',
+            risk_score: 85,
+            risk_breakdown: { flags: ['RATE_LIMIT_5M_EXCEEDED'] },
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      };
+
+      const result = await service.getVerificationLogs(
+        { page: 1, limit: 10, riskFactor: 'rate_limit' },
+        'admin-id',
+        'admin',
+      );
+
+      expect(result.data.length).toBe(1);
+      expect(result.total).toBe(1);
     });
   });
 });

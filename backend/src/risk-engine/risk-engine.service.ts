@@ -13,6 +13,7 @@ export interface RiskEvaluationResult {
     threatIntelScore: number;
     reputationScore: number;
     rateLimitScore: number;
+    flags: string[];
     rateLimitCounts?: { count10s: number; count5m: number; count1h: number };
     isRateLimitExceeded?: boolean;
     threatCategory?: string;
@@ -47,6 +48,7 @@ export class RiskEngineService {
     let threatIntelScore = 0;
     let reputationScore = 0;
     let rateLimitScore = 0;
+    const flags: string[] = [];
 
     // ==========================================
     // 1. CHẤM ĐIỂM HÀNH VI CLIENT (Client Signals)
@@ -54,18 +56,22 @@ export class RiskEngineService {
     if (honeypotFilled) {
       // Honeypot bị điền -> Chắc chắn là Bot tự động quét form
       clientBehaviorScore += 80;
+      flags.push('HONEYPOT_FILLED');
     }
 
     if (signals.webdriver) {
       // Headless Chrome / Selenium / Puppeteer
       clientBehaviorScore += 60;
+      flags.push('WEBDRIVER_AUTOMATION');
     }
 
     // Tốc độ điền form bất thường (< 600ms là tốc độ robot)
     if (signals.time_on_page_ms < 600) {
       clientBehaviorScore += 30;
+      flags.push('FAST_SUBMIT_SUBSECOND');
     } else if (signals.time_on_page_ms < 1500) {
       clientBehaviorScore += 15;
+      flags.push('FAST_SUBMIT_RAPID');
     }
 
     // Không có bất kỳ tương tác vật lý nào (chuột không di chuyển và không gõ phím)
@@ -76,11 +82,13 @@ export class RiskEngineService {
     // Do đó nếu platform = web mới phạt điểm không tương tác.
     if (platform === 'web' && noMouse && noKeys) {
       clientBehaviorScore += 25;
+      flags.push('PHYSICAL_INPUT_MISSING');
     }
 
     // Canvas fingerprint bị lỗi hoặc không hỗ trợ (môi trường máy ảo rút gọn)
     if (signals.canvas_fingerprint === 'error' || signals.canvas_fingerprint === 'unsupported') {
       clientBehaviorScore += 15;
+      flags.push('CANVAS_FINGERPRINT_ANOMALY');
     }
 
     // Phát hiện bot submit lặp lại trên cùng 1 trang không có tương tác mới (Anti-Automation)
@@ -88,14 +96,17 @@ export class RiskEngineService {
       if (noMouse && noKeys) {
         // Submit liên tiếp nhưng chuột/phím hoàn toàn đứng yên -> Vòng lặp Bot tự động
         clientBehaviorScore += 50;
+        flags.push('REPEATED_SUBMIT_NO_MOTION');
       }
       if (signals.time_on_page_ms < 2000) {
         // Submit lặp lại liên tục cách nhau dưới 2 giây
         clientBehaviorScore += 35;
+        flags.push('REPEATED_SUBMIT_RAPID');
       }
       if (signals.execution_count >= 3) {
         // Submit từ lần thứ 3 trở lên trên cùng 1 trang -> Tăng dần điểm cảnh giác
         clientBehaviorScore += Math.min(40, (signals.execution_count - 2) * 15);
+        flags.push('REPEATED_SUBMIT_HIGH_COUNT');
       }
     }
 
@@ -111,12 +122,14 @@ export class RiskEngineService {
         lowerGpu.includes('software rasterizer')
       ) {
         clientBehaviorScore += 45;
+        flags.push('VIRTUAL_GPU_DETECTED');
       }
     }
 
     // Mâu thuẫn phần cứng (VD: màn hình ảo 0x0)
     if (signals.screen_width === 0 || signals.screen_height === 0) {
       clientBehaviorScore += 20;
+      flags.push('SCREEN_ANOMALY');
     }
 
     // Điểm thưởng tương tác tự nhiên (giảm false-positive cho người dùng thật)
@@ -128,6 +141,7 @@ export class RiskEngineService {
 
     if (hasRichInteraction && clientBehaviorScore > 0) {
       clientBehaviorScore = Math.max(0, clientBehaviorScore - 10);
+      flags.push('HUMAN_INTERACTION_BONUS');
     }
 
     // ==========================================
@@ -143,15 +157,19 @@ export class RiskEngineService {
       ) {
         // IP nằm trong Blacklist tấn công / spam / botnet / abuse quốc tế
         threatIntelScore += 80;
+        flags.push('THREAT_INTEL_ATTACK');
       } else if (threatMatch.category === 'scanners') {
         // IP chuyên quét lỗ hổng và brute-force
         threatIntelScore += 65;
+        flags.push('THREAT_INTEL_SCANNER');
       } else if (threatMatch.category === 'tor' || threatMatch.category === 'proxy_anon') {
         // IP đi qua mạng Tor / Proxy ẩn danh
         threatIntelScore += 60;
+        flags.push('THREAT_INTEL_TOR');
       } else if (threatMatch.category === 'datacenter' || threatMatch.category === 'proxy_cdn') {
         // IP thuộc Server Cloud (AWS, GCP, DigitalOcean...)
         threatIntelScore += 35;
+        flags.push('THREAT_INTEL_DATACENTER');
       }
     }
 
@@ -166,15 +184,19 @@ export class RiskEngineService {
         // Đã fail quá 10 lần -> Coi như IP Banned (Max risk score 100)
         reputationScore += 100;
         isBannedIp = true;
+        flags.push('IP_REPUTATION_BANNED');
       } else if (repMatch.failCount >= 5) {
         reputationScore += 35;
+        flags.push('IP_REPUTATION_SUSPICIOUS');
       } else if (repMatch.failCount >= 2) {
         reputationScore += 15;
+        flags.push('IP_REPUTATION_SUSPICIOUS');
       }
 
       // Hệ số tăng cường nếu IP này đã từng bị flag ở từ 2 site trở lên
       if (repMatch.siteCountSeen >= 2) {
         reputationScore = Math.round(reputationScore * 1.5);
+        flags.push('IP_REPUTATION_MULTI_SITE');
       }
     }
 
@@ -191,27 +213,35 @@ export class RiskEngineService {
     // 4.1. Cửa sổ 10 giây (Burst attack)
     if (count10s > 20) {
       rateLimitScore += 70;
+      flags.push('RATE_LIMIT_10S_BURST');
     } else if (count10s > 10) {
       rateLimitScore += 45;
+      flags.push('RATE_LIMIT_10S_HIGH');
     } else if (count10s > 4) {
       rateLimitScore += 25;
+      flags.push('RATE_LIMIT_10S_MODERATE');
     }
 
     // 4.2. Cửa sổ 5 phút (Low & Slow Bot: submit lặp lại trong 5 phút)
     if (count5m > 15) {
       rateLimitScore += 80;
+      flags.push('RATE_LIMIT_5M_SPIKE');
     } else if (count5m > 6) {
       // > 6 lần / 5 phút -> Tần suất quá nhanh
       rateLimitScore += 60;
+      flags.push('RATE_LIMIT_5M_EXCEEDED');
     } else if (count5m > 3) {
       rateLimitScore += 35;
+      flags.push('RATE_LIMIT_5M_MODERATE');
     }
 
     // 4.3. Cửa sổ 1 giờ (Scraping kéo dài)
     if (count1h > 60) {
       rateLimitScore += 60;
+      flags.push('RATE_LIMIT_1H_FLOOD');
     } else if (count1h > 30) {
       rateLimitScore += 35;
+      flags.push('RATE_LIMIT_1H_MODERATE');
     }
 
     // Đánh dấu cờ vượt ngưỡng spam cần chặn cứng
@@ -253,6 +283,7 @@ export class RiskEngineService {
         threatIntelScore,
         reputationScore,
         rateLimitScore,
+        flags,
         rateLimitCounts: { count10s, count5m, count1h },
         isRateLimitExceeded,
         threatCategory: threatMatch.category,

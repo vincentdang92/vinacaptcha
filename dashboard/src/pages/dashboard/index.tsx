@@ -13,6 +13,7 @@ import {
   ClearOutlined,
   EyeOutlined,
   SafetyCertificateOutlined,
+  RobotOutlined,
 } from "@ant-design/icons";
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
@@ -23,6 +24,40 @@ import { IpDetailDrawer } from "../../components/ip-detail-drawer";
 const { Title, Text } = Typography;
 
 const STATS_URL = `${API_BASE_URL}/dashboard/stats`;
+
+const FLAG_CONFIG: Record<string, { label: string; color: string }> = {
+  RATE_LIMIT_5M_EXCEEDED: { label: '403 Rate Limit (5m)', color: 'error' },
+  RATE_LIMIT_10S_BURST: { label: 'Burst Traffic (10s)', color: 'error' },
+  RATE_LIMIT_1H_FLOOD: { label: 'Flood Traffic (1h)', color: 'error' },
+  IP_REPUTATION_BANNED: { label: 'IP Bị Cấm', color: 'error' },
+  IP_REPUTATION_SUSPICIOUS: { label: 'IP Khả Nghi', color: 'warning' },
+  IP_REPUTATION_MULTI_SITE: { label: 'IP Tấn Công Đa Site', color: 'error' },
+  THREAT_INTEL_ATTACK: { label: 'Threat Attack', color: 'volcano' },
+  THREAT_INTEL_SCANNER: { label: 'Scanner Bot', color: 'volcano' },
+  THREAT_INTEL_TOR: { label: 'Mạng Tor / Proxy Ẩn Danh', color: 'warning' },
+  THREAT_INTEL_DATACENTER: { label: 'Datacenter / VPN', color: 'orange' },
+  WEBDRIVER_AUTOMATION: { label: 'Webdriver Bot', color: 'purple' },
+  HONEYPOT_FILLED: { label: 'Honeypot Triggered', color: 'magenta' },
+  VIRTUAL_GPU_DETECTED: { label: 'Virtual GPU', color: 'gold' },
+  PHYSICAL_INPUT_MISSING: { label: 'Không Tương Tác Vật Lý', color: 'warning' },
+  REPEATED_SUBMIT_NO_MOTION: { label: 'Submit Lặp (0 Motion)', color: 'red' },
+  REPEATED_SUBMIT_RAPID: { label: 'Submit Lặp Quá Nhanh', color: 'red' },
+  REPEATED_SUBMIT_HIGH_COUNT: { label: 'Submit Lặp Nhiều Lần', color: 'red' },
+  FAST_SUBMIT_SUBSECOND: { label: 'Submit < 0.6s', color: 'volcano' },
+  FAST_SUBMIT_RAPID: { label: 'Submit Nhanh < 1.5s', color: 'gold' },
+  CANVAS_FINGERPRINT_ANOMALY: { label: 'Canvas Fingerprint Bất Thường', color: 'orange' },
+  SCREEN_ANOMALY: { label: 'Màn Hình Ảo 0x0', color: 'red' },
+  HUMAN_INTERACTION_BONUS: { label: 'Tương Tác Tự Nhiên (Bonus)', color: 'success' },
+};
+
+interface RiskTriggerItem {
+  key: string;
+  label: string;
+  count: number;
+  percentage: number;
+  color: string;
+  icon: string;
+}
 
 interface StatsData {
   totalRequests: number;
@@ -49,6 +84,7 @@ interface StatsData {
     deviceBreakdown: { mobile: number; desktop: number; touchScreenPct: number };
     userEngagement: { avgTimeOnPageMs: number; avgScrollDepthPct: number; pasteDetectedCount: number };
   };
+  riskTriggers?: RiskTriggerItem[];
 }
 
 const defaultStats: StatsData = {
@@ -64,6 +100,7 @@ const defaultStats: StatsData = {
     deviceBreakdown: { mobile: 0, desktop: 0, touchScreenPct: 0 },
     userEngagement: { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 },
   },
+  riskTriggers: [],
 };
 
 export const DashboardPage = () => {
@@ -80,6 +117,7 @@ export const DashboardPage = () => {
   const [debouncedIp, setDebouncedIp] = useState("");
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [resultFilter, setResultFilter] = useState<string>("all");
+  const [riskFactorFilter, setRiskFactorFilter] = useState<string>("all");
   const [ipSummary, setIpSummary] = useState<any>(null);
   const [selectedIpForDetail, setSelectedIpForDetail] = useState<string | null>(null);
 
@@ -102,6 +140,7 @@ export const DashboardPage = () => {
     };
     if (debouncedIp) params.ip = debouncedIp;
     if (resultFilter && resultFilter !== "all") params.result = resultFilter;
+    if (riskFactorFilter && riskFactorFilter !== "all") params.riskFactor = riskFactorFilter;
     if (dateRange && dateRange[0] && dateRange[1]) {
       params.startDate = dateRange[0].startOf("minute").toISOString();
       params.endDate = dateRange[1].endOf("minute").toISOString();
@@ -123,7 +162,7 @@ export const DashboardPage = () => {
         console.error("[Dashboard] Lỗi tải logs:", err);
         setLogLoading(false);
       });
-  }, [page, pageSize, debouncedIp, dateRange, resultFilter]);
+  }, [page, pageSize, debouncedIp, dateRange, resultFilter, riskFactorFilter]);
 
   useEffect(() => {
     fetchLogs();
@@ -156,6 +195,7 @@ export const DashboardPage = () => {
                 deviceBreakdown: { mobile: 0, desktop: 0, touchScreenPct: 0 },
                 userEngagement: { avgTimeOnPageMs: 0, avgScrollDepthPct: 0, pasteDetectedCount: 0 },
               },
+              riskTriggers: Array.isArray(data.riskTriggers) ? data.riskTriggers : [],
             });
             setLoading(false);
           }
@@ -398,15 +438,93 @@ export const DashboardPage = () => {
         </Col>
       </Row>
 
-      {/* Row 3: Marketing & UX Intelligence Analytics */}
+      {/* Row 3: Cybersecurity & Risk Triggers + Marketing & UX Intelligence Analytics */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        {/* Col 1: UTM Campaign & Ad Fraud Monitor */}
-        <Col xs={24} lg={14}>
+        {/* Col 1: Top Risk Triggers & Threat Breakdown */}
+        <Col xs={24} lg={8}>
+          <Card
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <RobotOutlined style={{ color: '#ea5455' }} />
+                  <Text style={{ fontWeight: 600 }}>Tác Nhân Gây Rủi Ro (Risk Triggers)</Text>
+                </div>
+                {riskFactorFilter !== 'all' && (
+                  <Button 
+                    size="small" 
+                    type="link" 
+                    onClick={() => {
+                      setRiskFactorFilter('all');
+                      setPage(1);
+                    }}
+                    style={{ padding: 0, fontSize: 11 }}
+                  >
+                    Bỏ lọc
+                  </Button>
+                )}
+              </div>
+            }
+            variant="borderless"
+            styles={{ body: { padding: '14px 18px' } }}
+            style={{ height: '100%' }}
+          >
+            {stats?.riskTriggers && stats.riskTriggers.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {stats.riskTriggers.map((item) => (
+                  <div
+                    key={item.key}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      transition: 'all 0.2s',
+                      backgroundColor: riskFactorFilter === item.key ? 'rgba(115,103,240,0.1)' : 'rgba(0,0,0,0.02)',
+                      border: riskFactorFilter === item.key ? '1px solid #7367f0' : '1px solid transparent',
+                    }}
+                    onClick={() => {
+                      setRiskFactorFilter(item.key);
+                      setPage(1);
+                    }}
+                    title={`Bấm để lọc danh sách logs theo: ${item.label}`}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <Text strong style={{ fontSize: 12, color: item.color }}>
+                        {item.label}
+                      </Text>
+                      <Space size={4}>
+                        <Tag color={riskFactorFilter === item.key ? 'purple' : 'default'} style={{ fontSize: 11, margin: 0, fontWeight: 600 }}>
+                          {item.count} ({item.percentage}%)
+                        </Tag>
+                        {riskFactorFilter === item.key && (
+                          <Tag color="processing" style={{ fontSize: 10, margin: 0 }}>Đang Lọc</Tag>
+                        )}
+                      </Space>
+                    </div>
+                    <Progress
+                      percent={item.percentage}
+                      size="small"
+                      strokeColor={item.color}
+                      showInfo={false}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 180 }}>
+                <SafetyCertificateOutlined style={{ fontSize: 36, color: '#28c76f', marginBottom: 8 }} />
+                <Text type="secondary" style={{ fontSize: 12 }}>Chưa ghi nhận tác nhân rủi ro nào</Text>
+              </div>
+            )}
+          </Card>
+        </Col>
+
+        {/* Col 2: UTM Campaign & Ad Fraud Monitor */}
+        <Col xs={24} lg={8}>
           <Card
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CompassOutlined style={{ color: '#7367f0' }} />
-                <Text style={{ fontWeight: 600 }}>Chiến Dịch Ads & Giám Sát Click Tặc (UTM)</Text>
+                <Text style={{ fontWeight: 600 }}>Chiến Dịch Ads (UTM)</Text>
               </div>
             }
             variant="borderless"
@@ -418,13 +536,13 @@ export const DashboardPage = () => {
               rowKey={(record) => record.campaign + record.source}
               pagination={false}
               size="small"
-              locale={{ emptyText: "Chưa ghi nhận traffic từ chiến dịch UTM nào" }}
+              locale={{ emptyText: "Chưa ghi nhận traffic từ UTM" }}
             >
               <Table.Column
                 title="Chiến Dịch / Nguồn"
                 render={(_: any, r: any) => (
                   <div>
-                    <Text strong style={{ fontSize: 13 }}>{r.campaign}</Text>
+                    <Text strong style={{ fontSize: 12 }}>{r.campaign}</Text>
                     <div><Tag color="geekblue" style={{ fontSize: 10, margin: 0 }}>{r.source}</Tag></div>
                   </div>
                 )}
@@ -433,18 +551,7 @@ export const DashboardPage = () => {
                 title="Lượt Submit"
                 dataIndex="total"
                 align="center"
-                render={(total: number) => <Text strong>{total}</Text>}
-              />
-              <Table.Column
-                title="Tỉ Lệ Pass"
-                render={(_: any, r: any) => {
-                  const passRate = r.total > 0 ? Math.round((r.passCount / r.total) * 100) : 0;
-                  return (
-                    <div style={{ width: 90 }}>
-                      <Progress percent={passRate} size="small" strokeColor="#28c76f" />
-                    </div>
-                  );
-                }}
+                render={(total: number) => <Text strong style={{ fontSize: 12 }}>{total}</Text>}
               />
               <Table.Column
                 title="Tỉ Lệ Click Tặc"
@@ -453,7 +560,7 @@ export const DashboardPage = () => {
                   const isHighFraud = fraudRate >= 30;
                   return (
                     <div>
-                      <Tag color={isHighFraud ? "error" : fraudRate > 10 ? "warning" : "success"}>
+                      <Tag color={isHighFraud ? "error" : fraudRate > 10 ? "warning" : "success"} style={{ fontSize: 10 }}>
                         {fraudRate}% Bot
                       </Tag>
                     </div>
@@ -464,8 +571,8 @@ export const DashboardPage = () => {
           </Card>
         </Col>
 
-        {/* Col 2: Device & CRO Interaction Intelligence */}
-        <Col xs={24} lg={10}>
+        {/* Col 3: Device & CRO Interaction Intelligence */}
+        <Col xs={24} lg={8}>
           <Card
             title={
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -474,10 +581,10 @@ export const DashboardPage = () => {
               </div>
             }
             variant="borderless"
-            styles={{ body: { padding: "16px 20px" } }}
+            styles={{ body: { padding: "16px 18px" } }}
             style={{ height: '100%' }}
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Mobile vs Desktop Split */}
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
@@ -499,35 +606,35 @@ export const DashboardPage = () => {
                       showInfo={false}
                       strokeColor="#7367f0"
                       trailColor="#00cfe8"
-                      size={["100%", 10]}
+                      size={["100%", 8]}
                     />
                   );
                 })()}
               </div>
 
               {/* Interaction Metrics Grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>
-                <div style={{ backgroundColor: "rgba(115,103,240,0.06)", borderRadius: 8, padding: "10px 12px" }}>
-                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>⏱️ TG Điền Form TB</Text>
-                  <Text strong style={{ fontSize: 16, color: "#7367f0" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 2 }}>
+                <div style={{ backgroundColor: "rgba(115,103,240,0.06)", borderRadius: 8, padding: "8px 10px" }}>
+                  <Text type="secondary" style={{ fontSize: 10, display: "block" }}>⏱️ TG Điền Form TB</Text>
+                  <Text strong style={{ fontSize: 14, color: "#7367f0" }}>
                     {stats?.marketingStats?.userEngagement?.avgTimeOnPageMs ? `${(stats.marketingStats.userEngagement.avgTimeOnPageMs / 1000).toFixed(1)}s` : "—"}
                   </Text>
                 </div>
-                <div style={{ backgroundColor: "rgba(40,199,111,0.06)", borderRadius: 8, padding: "10px 12px" }}>
-                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📜 Độ Sâu Cuộn TB</Text>
-                  <Text strong style={{ fontSize: 16, color: "#28c76f" }}>
+                <div style={{ backgroundColor: "rgba(40,199,111,0.06)", borderRadius: 8, padding: "8px 10px" }}>
+                  <Text type="secondary" style={{ fontSize: 10, display: "block" }}>📜 Độ Sâu Cuộn TB</Text>
+                  <Text strong style={{ fontSize: 14, color: "#28c76f" }}>
                     {stats?.marketingStats?.userEngagement?.avgScrollDepthPct ? `${stats.marketingStats.userEngagement.avgScrollDepthPct}%` : "—"}
                   </Text>
                 </div>
-                <div style={{ backgroundColor: "rgba(255,159,67,0.06)", borderRadius: 8, padding: "10px 12px" }}>
-                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📋 Lượt Paste Form</Text>
-                  <Text strong style={{ fontSize: 16, color: "#ff9f43" }}>
+                <div style={{ backgroundColor: "rgba(255,159,67,0.06)", borderRadius: 8, padding: "8px 10px" }}>
+                  <Text type="secondary" style={{ fontSize: 10, display: "block" }}>📋 Lượt Paste Form</Text>
+                  <Text strong style={{ fontSize: 14, color: "#ff9f43" }}>
                     {stats?.marketingStats?.userEngagement?.pasteDetectedCount || 0}
                   </Text>
                 </div>
-                <div style={{ backgroundColor: "rgba(0,207,232,0.06)", borderRadius: 8, padding: "10px 12px" }}>
-                  <Text type="secondary" style={{ fontSize: 11, display: "block" }}>📱 Màn Hình Touch</Text>
-                  <Text strong style={{ fontSize: 16, color: "#00cfe8" }}>
+                <div style={{ backgroundColor: "rgba(0,207,232,0.06)", borderRadius: 8, padding: "8px 10px" }}>
+                  <Text type="secondary" style={{ fontSize: 10, display: "block" }}>📱 Màn Hình Touch</Text>
+                  <Text strong style={{ fontSize: 14, color: "#00cfe8" }}>
                     {stats?.marketingStats?.deviceBreakdown?.touchScreenPct ? `${stats.marketingStats.deviceBreakdown.touchScreenPct}%` : "—"}
                   </Text>
                 </div>
@@ -537,7 +644,7 @@ export const DashboardPage = () => {
         </Col>
       </Row>
 
-      {/* Row 4: Table Full Width với Bộ Lọc IP & Thời Gian Tối Ưu */}
+      {/* Row 4: Table Full Width với Bộ Lọc IP, Tác Nhân & Thời Gian Tối Ưu */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>
           <Card
@@ -547,6 +654,11 @@ export const DashboardPage = () => {
                 {logTotal > 0 && (
                   <Tag color="blue" style={{ fontSize: 11, borderRadius: 10, margin: 0 }}>
                     {logTotal} logs
+                  </Tag>
+                )}
+                {riskFactorFilter !== 'all' && (
+                  <Tag color="purple" closable onClose={() => { setRiskFactorFilter('all'); setPage(1); }} style={{ fontSize: 11, margin: 0 }}>
+                    Tác nhân: {riskFactorFilter}
                   </Tag>
                 )}
               </div>
@@ -560,7 +672,7 @@ export const DashboardPage = () => {
                   allowClear
                   value={searchIp}
                   onChange={(e) => setSearchIp(e.target.value)}
-                  style={{ width: 220, borderRadius: 6 }}
+                  style={{ width: 180, borderRadius: 6 }}
                 />
 
                 {/* 2. Bộ chọn khoảng thời gian */}
@@ -583,7 +695,28 @@ export const DashboardPage = () => {
                   style={{ borderRadius: 6 }}
                 />
 
-                {/* 3. Lọc theo trạng thái Pass / Fail */}
+                {/* 3. Lọc theo tác nhân rủi ro (Risk Factor) */}
+                <Select
+                  value={riskFactorFilter}
+                  onChange={(val) => {
+                    setRiskFactorFilter(val);
+                    setPage(1);
+                  }}
+                  style={{ width: 180 }}
+                  options={[
+                    { label: 'Tất cả tác nhân rủi ro', value: 'all' },
+                    { label: '⚡ 403 Quá Nhanh (Rate Limit)', value: 'rate_limit' },
+                    { label: '🤖 Trình Duyệt Webdriver', value: 'webdriver' },
+                    { label: '🪤 Dính Bẫy Honeypot', value: 'honeypot' },
+                    { label: '💻 GPU Máy Ảo Server', value: 'virtual_gpu' },
+                    { label: '🌐 Threat Intel / Datacenter', value: 'threat_intel' },
+                    { label: '🔁 Submit Lặp Không Motion', value: 'anti_automation' },
+                    { label: '🚫 IP Bị Cấm (Banned)', value: 'banned_ip' },
+                    { label: '🧭 Nguồn UTM Ads', value: 'utm' },
+                  ]}
+                />
+
+                {/* 4. Lọc theo trạng thái Pass / Fail */}
                 <Select
                   value={resultFilter}
                   onChange={(val) => {
@@ -598,7 +731,7 @@ export const DashboardPage = () => {
                   ]}
                 />
 
-                {/* 4. Nút làm mới */}
+                {/* 5. Nút làm mới */}
                 <Button
                   icon={<ReloadOutlined spin={logLoading} />}
                   onClick={fetchLogs}
@@ -772,26 +905,49 @@ export const DashboardPage = () => {
                 title="Chi Tiết Phân Tích"
                 render={(_: any, record: any) => {
                   const bd = record.risk_breakdown || {};
+                  const flags: string[] = Array.isArray(bd.flags) ? bd.flags : [];
                   const reasons: string[] = [];
                   if (bd.isBannedIp) reasons.push('IP Bị Cấm');
                   if (bd.clientBehaviorScore > 0) reasons.push(`Bot (+${bd.clientBehaviorScore})`);
                   if (bd.threatIntelScore > 0) reasons.push(`${bd.threatCategory || 'Threat'} (+${bd.threatIntelScore})`);
                   if (bd.reputationScore > 0) reasons.push(`Reputation (+${bd.reputationScore})`);
                   if (bd.rateLimitScore > 0) reasons.push(`RateLimit (+${bd.rateLimitScore})`);
-                  if (reasons.length === 0) reasons.push('Bình thường');
+                  if (reasons.length === 0 && flags.length === 0) reasons.push('Bình thường');
 
                   return (
-                    <div>
-                      <Tag color={record.result === 'pass' ? 'success' : 'error'} style={{ fontSize: 11 }}>
-                        {record.result ? record.result.toUpperCase() : 'UNKNOWN'}
-                      </Tag>
-                      <Tooltip title={reasons.join(' | ')}>
-                        <div style={{ marginTop: 1, cursor: 'help' }}>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            {reasons[0]}{reasons.length > 1 ? ' …' : ''}
-                          </Text>
+                    <div style={{ maxWidth: 220 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Tag color={record.result === 'pass' ? 'success' : 'error'} style={{ fontSize: 11, margin: 0 }}>
+                          {record.result ? record.result.toUpperCase() : 'UNKNOWN'}
+                        </Tag>
+                        {bd.threatCategory && (
+                          <Tag color="volcano" style={{ fontSize: 10, margin: 0 }}>
+                            {bd.threatCategory}
+                          </Tag>
+                        )}
+                      </div>
+
+                      {/* Hiển thị Flags rủi ro chi tiết nếu có */}
+                      {flags.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                          {flags.map((flagKey: string) => {
+                            const cfg = FLAG_CONFIG[flagKey] || { label: flagKey, color: 'default' };
+                            return (
+                              <Tag key={flagKey} color={cfg.color} style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>
+                                {cfg.label}
+                              </Tag>
+                            );
+                          })}
                         </div>
-                      </Tooltip>
+                      ) : (
+                        <Tooltip title={reasons.join(' | ')}>
+                          <div style={{ marginTop: 1, cursor: 'help' }}>
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                              {reasons[0]}{reasons.length > 1 ? ' …' : ''}
+                            </Text>
+                          </div>
+                        </Tooltip>
+                      )}
                     </div>
                   );
                 }}
