@@ -169,6 +169,68 @@ describe('IssueService', () => {
       expect(result.pow_difficulty).toBe(12);
     });
 
+    describe('force_challenge (client chỉ được nâng mức, không được hạ)', () => {
+      const mockSite = (challengeMode: string) =>
+        mockDataSource.query.mockResolvedValue([{
+          id: 1,
+          site_id: 1,
+          revoked_at: null,
+          platform: 'web',
+          primary_domain: 'example.com',
+          allowed_domains: [],
+          challenge_mode: challengeMode,
+        }]);
+      const mockRisk = (challengeType: 'none' | 'slider' | 'pow', powDifficulty: number | null = null) =>
+        mockRiskEngineService.evaluateRisk.mockResolvedValue({ challengeType, powDifficulty, riskScore: 50, breakdown: {} });
+      const issueWith = (force_challenge?: string) =>
+        service.issueToken(
+          'valid_key',
+          { domain: 'example.com', client_signals: {}, honeypot_filled: false, force_challenge } as IssueTokenDto,
+          '1.2.3.4',
+        );
+
+      it.each(['none', 'auto'])('cannot downgrade a slider site with force_challenge=%s', async (force) => {
+        mockSite('slider');
+        mockRisk('none');
+        const result = await issueWith(force);
+        expect(result.challenge_type).toBe('slider');
+      });
+
+      it('cannot downgrade a pow challenge chosen by the risk engine', async () => {
+        mockSite('auto');
+        mockRisk('pow', 18);
+        for (const force of ['none', 'slider']) {
+          const result = await issueWith(force);
+          expect(result.challenge_type).toBe('pow');
+          expect(result.pow_difficulty).toBe(18);
+        }
+      });
+
+      it('can still escalate an invisible challenge to slider (login forms)', async () => {
+        mockSite('auto');
+        mockRisk('none');
+        const result = await issueWith('slider');
+        expect(result.challenge_type).toBe('slider');
+        expect(result.slider_data).toBeDefined();
+      });
+
+      it('can escalate slider to pow with the default difficulty', async () => {
+        mockSite('slider');
+        mockRisk('none');
+        const result = await issueWith('pow');
+        expect(result.challenge_type).toBe('pow');
+        expect(result.pow_difficulty).toBe(12);
+      });
+
+      it('stores the effective (not the requested) challenge type in the session', async () => {
+        mockSite('slider');
+        mockRisk('none');
+        await issueWith('none');
+        const sessionJson = mockRedisService.setOneTimeToken.mock.calls.at(-1)?.[2];
+        expect(JSON.parse(sessionJson).challengeType).toBe('slider');
+      });
+    });
+
     it('should throw ForbiddenException and log failure when IP is banned', async () => {
       mockDataSource.query.mockResolvedValue([{ 
         id: 1, 

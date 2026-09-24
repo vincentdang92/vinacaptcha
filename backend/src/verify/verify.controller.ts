@@ -1,6 +1,7 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, Ip, Headers } from '@nestjs/common';
+import { Body, Controller, Post, HttpCode, HttpStatus, Ip } from '@nestjs/common';
 import { VerifyService } from './verify.service.js';
 import { VerifyDto, SiteVerifyDto } from './dto/verify.dto.js';
+import { resolveClientIp } from '../common/client-ip.js';
 
 @Controller('v1')
 export class VerifyController {
@@ -10,10 +11,9 @@ export class VerifyController {
   @HttpCode(HttpStatus.OK)
   async verifyChallenge(
     @Body() dto: VerifyDto,
-    @Headers('x-forwarded-for') forwardedFor: string,
-    @Ip() rawIp: string,
+    @Ip() requestIp: string,
   ) {
-    const clientIp = (forwardedFor?.split(',')[0]?.trim()) || rawIp || '127.0.0.1';
+    const clientIp = resolveClientIp(requestIp);
     return this.verifyService.verifyChallenge(dto, clientIp);
   }
 

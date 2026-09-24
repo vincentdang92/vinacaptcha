@@ -1,4 +1,4 @@
-import { IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ClientSignalsDto {
@@ -160,9 +160,11 @@ export class IssueTokenDto {
   client_reported_ip?: string;
 
   /**
-   * Chế độ thử thách ép buộc (Dùng cho Demo / Testing / QA).
+   * Yêu cầu tối thiểu một loại thử thách (VD: form đăng nhập / nạp tiền luôn muốn slider).
+   * Chỉ có tác dụng khi NÂNG mức so với lựa chọn của site / risk engine; 'auto' và 'none'
+   * được giữ lại để tương thích client cũ nhưng không hạ được mức thử thách.
    */
   @IsOptional()
-  @IsString()
-  force_challenge?: 'none' | 'slider' | 'pow';
+  @IsIn(['auto', 'none', 'slider', 'pow'])
+  force_challenge?: 'auto' | 'none' | 'slider' | 'pow';
 }

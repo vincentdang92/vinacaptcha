@@ -4,11 +4,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module.js';
 import { RedisService } from './redis/redis.service.js';
 import { DataSource } from 'typeorm';
+import { TRUSTED_PROXY_RANGES } from './common/client-ip.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: true }) // Cần thiết để đọc X-Forwarded-For từ reverse proxy
+    // Chỉ tin X-Forwarded-For từ proxy nội bộ (gateway nginx) — xem common/client-ip.ts
+    new FastifyAdapter({ trustProxy: TRUSTED_PROXY_RANGES })
   );
   
   // Enable validation pipe globally

@@ -5,6 +5,7 @@ import { RedisService } from '../redis/redis.service.js';
 import { ReputationService } from '../reputation/reputation.service.js';
 import { DataSource } from 'typeorm';
 import * as crypto from 'crypto';
+import { ServiceUnavailableException } from '@nestjs/common';
 
 describe('VerifyService', () => {
   let service: VerifyService;
@@ -66,6 +67,20 @@ describe('VerifyService', () => {
       expect(result.result).toBe('pass');
       expect(result.verify_token).toMatch(/^vt_/);
     });
+
+    it.each([undefined, 'auto', 'captcha'])(
+      'should fail if the session challenge type is unknown (%s)',
+      async (challengeType) => {
+        mockRedisService.useOneTimeToken.mockResolvedValue(JSON.stringify({ siteId: 1, challengeType, riskScore: 10 }));
+        mockDataSource.query.mockResolvedValue([]);
+
+        const result = await service.verifyChallenge({ session_id: '123' }, '1.2.3.4');
+
+        expect(result.result).toBe('fail');
+        expect(result.reason).toBe('unknown_challenge_type');
+        expect(result.verify_token).toBeUndefined();
+      },
+    );
 
     it('should pass if slider challenge is solved within tolerance', async () => {
       mockRedisService.useOneTimeToken.mockResolvedValue(JSON.stringify({
@@ -182,13 +197,30 @@ describe('VerifyService', () => {
       expect(result.hostname).toBe('example.com');
     });
 
-    it('should fallback to success if unexpected database error occurs during trial', async () => {
+    it('should fail closed with 503 (never success) if an unexpected database error occurs', async () => {
       mockDataSource.query.mockRejectedValue(new Error('DB Connection Timeout'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const result = await service.siteVerify({ secret: 'any_key', verify_token: 'any_token' });
-      expect(result.success).toBe(true);
-      expect((result as any).fallback).toBe(true);
-      expect((result as any).warning).toBe('system_busy_trial_fallback');
+      const promise = service.siteVerify({ secret: 'cap_live_secret_value', verify_token: 'forged_token' });
+      await expect(promise).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await expect(promise).rejects.toMatchObject({
+        response: { error: { code: 'service_unavailable' } },
+      });
+
+      // Log không được chứa secret
+      expect(consoleSpy.mock.calls.flat().join(' ')).not.toContain('cap_live_secret_value');
+      consoleSpy.mockRestore();
+    });
+
+    it('should fail closed with 503 if Redis fails while consuming the token', async () => {
+      mockDataSource.query.mockResolvedValueOnce([{ site_id: 1, revoked_at: null }]);
+      mockRedisService.useOneTimeToken.mockRejectedValue(new Error('ECONNREFUSED'));
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await expect(service.siteVerify({ secret: 'good', verify_token: '123' })).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      consoleSpy.mockRestore();
     });
   });
 });
