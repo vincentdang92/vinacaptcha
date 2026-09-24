@@ -949,10 +949,17 @@ export class AdminService implements OnModuleInit {
   }
 
 
-  async activateAccount(token: string) {
-    const acc = await this.accountsRepo.findOneBy({ activation_token: token });
+  async activateAccount(token: unknown) {
+    // Token do register() sinh ra luôn là 32 byte hex; chặn sớm giá trị rỗng/không phải chuỗi
+    // để không bao giờ truy vấn theo activation_token = '' (giá trị của tài khoản đã kích hoạt).
+    const cleanToken = typeof token === 'string' ? token.trim().toLowerCase() : '';
+    if (!/^[a-f0-9]{64}$/.test(cleanToken)) {
+      throw new BadRequestException('Liên kết kích hoạt không hợp lệ.');
+    }
+
+    const acc = await this.accountsRepo.findOneBy({ activation_token: cleanToken });
     if (!acc) {
-      throw new BadRequestException('Token không hợp lệ hoặc đã hết hạn');
+      throw new BadRequestException('Liên kết kích hoạt không hợp lệ hoặc đã được sử dụng.');
     }
     
     acc.is_verified = true;
