@@ -279,6 +279,10 @@ Sau khi cập nhật:
 - **`docker/init-db.sql` thay đổi?** Không tự áp dụng vào DB đang chạy — viết và chạy SQL tương ứng bằng `psql` (sau khi đã sao lưu).
 - **Sửa `.env` xong** phải chạy `docker compose up -d` (tạo lại container). `docker compose restart` **không** nạp lại biến môi trường.
 - Bản sửa link kích hoạt (`fix/activation-link`): nếu server đã bật SSL từ trước, làm thêm mục 6.1.
+- Bản vá bảo mật C1–C3 (`fix/critical-captcha-bypass`):
+  - `/v1/siteverify` trả **HTTP 503** (thay vì 200 `success: true`) khi hệ thống captcha gặp sự cố — báo trước cho khách hàng kiểm tra code tích hợp xử lý 5xx/timeout theo mẫu trong README/API Docs.
+  - Server đã bật SSL: không bắt buộc, nhưng nên chạy lại `./ssl.sh <domain> <email>` để `ssl.conf` ghi đè `X-Forwarded-For` như bản mới (gateway gián đoạn vài giây).
+  - Kiểm tra sau deploy: Dashboard → Nhật ký xác thực phải hiện IP thật của người truy cập, không phải IP nội bộ `172.x.x.x`.
 
 ### Rollback
 

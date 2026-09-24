@@ -1,6 +1,6 @@
 # KNOWN_ISSUES.md — Lỗi đã biết & hướng xử lý
 
-> Cập nhật: 2026-09-24 · Audit trên commit `f13ae50` (nhánh `fix/activation-link`).
+> Cập nhật: 2026-09-24 · Audit trên commit `f13ae50`; đã sửa thêm C1–C3 ở `e85db7b` (nhánh `fix/critical-captcha-bypass`).
 > Mọi mục bên dưới đã được đối chiếu với code thật (file:dòng tại thời điểm audit).
 > Khi sửa xong một mục: chuyển nó sang phần **Đã sửa**, ghi commit hash.
 
@@ -21,30 +21,25 @@ Mức độ:
 
 ---
 
+### ✅ C1. Vượt captcha hoàn toàn bằng `force_challenge` — `e85db7b`
+- **Lỗi cũ:** `POST /v1/issue` nhận `force_challenge` là chuỗi bất kỳ và ghi đè cả `challenge_mode` của site lẫn risk engine; verify coi mọi loại khác `pow`/`slider` là pass → gửi `{"force_challenge":"none"}` là có `verify_token` mà không phải giải gì.
+- **Đã sửa:** DTO chỉ nhận `auto | none | slider | pow`; mức hiệu lực = max(mức site/risk engine, mức client yêu cầu) theo thứ tự `none < slider < pow` — client chỉ nâng được, không hạ được. Verify: loại lạ → fail (`unknown_challenge_type`). Test: `issue.service.spec.ts`, `verify.service.spec.ts`.
+
+### ✅ C2. `/v1/siteverify` trả `success: true` khi có lỗi nội bộ — `e85db7b`
+- **Lỗi cũ:** mọi exception (DB/Redis quá tải) → `success: true, fallback: true`, kể cả với secret sai và token bịa; kẻ tấn công chủ động làm quá tải được.
+- **Đã sửa:** trả HTTP 503 `{ "error": { "code": "service_unavailable", ... } }`; log JSON chỉ gồm `code`/`message`. API_CONTRACT 1.3 và trang API Docs đã cập nhật.
+- **Ảnh hưởng tới khách hàng:** backend của site khách giờ nhận 503 thay vì 200 khi hệ thống captcha gặp sự cố. Code tích hợp theo mẫu trong README/API Docs (timeout 5s, 5xx → tự quyết cho qua) vẫn hoạt động; code chỉ đọc `success` sẽ chặn (fail-closed) — nên thông báo cho khách trước khi deploy.
+
+### ✅ C3. Giả mạo IP qua `X-Forwarded-For` — `e85db7b`
+- **Lỗi cũ:** nginx nối thêm vào header client gửi, backend lấy phần tử đầu tiên = giá trị client tự điền → vượt rate-limit/ban, gài ban IP người khác.
+- **Đã sửa:** Fastify `trustProxy` chỉ tin hop loopback/link-local/private (`backend/src/common/client-ip.ts`), controller dùng `request.ip`; IP sai định dạng → `0.0.0.0`; `client_reported_ip` chỉ dùng ở dev. nginx (`vina-captcha.conf` + template `ssl.sh`) ghi đè `X-Forwarded-For $remote_addr`. Test tích hợp qua Fastify thật: `client-ip.spec.ts`.
+- **Việc còn lại khi deploy:** server đã bật SSL vẫn giữ `nginx/conf.d/ssl.conf` cũ (nối header) — backend mới đã tự bỏ qua phần client gửi nên vẫn an toàn; muốn đồng bộ thì chạy lại `./ssl.sh <domain> <email>` (gateway gián đoạn vài giây). Nếu đặt CDN (Cloudflare…) trước gateway: cần cấu hình `set_real_ip_from` + `real_ip_header` trong nginx, nếu không mọi người dùng sẽ mang IP của CDN.
+
+---
+
 ## Critical
 
-### C1. Vượt captcha hoàn toàn bằng `force_challenge`
-- **Vị trí:** `backend/src/issue/dto/issue.dto.ts:165`, `backend/src/issue/issue.service.ts:222`, `backend/src/verify/verify.service.ts:48-79`
-- **Lỗi:** `POST /v1/issue` nhận `force_challenge` từ client (chỉ có `@IsString()`), ghi đè cả `challenge_mode` của site lẫn kết quả risk engine. Ở bước verify, mọi `challengeType` khác `pow`/`slider` đều được tính là pass.
-- **Khai thác:** gửi `/v1/issue` với `{"force_challenge":"none"}` (hoặc chuỗi bất kỳ) rồi gọi `/v1/verify` là có `verify_token` hợp lệ — cho mọi site key, kể cả captcha đăng nhập Dashboard.
-- **Cách fix:**
-  1. Bỏ `force_challenge` khỏi DTO public; nếu cần cho demo thì chỉ cho phép **nâng** mức (`@IsIn(['slider','pow'])`, không bao giờ thấp hơn mức site/risk quyết định).
-  2. Trong `verifyChallenge`, chỉ pass khi `challengeType === 'none'` là do server quyết định; loại không nhận diện được → fail.
-  3. Thêm test: issue với `force_challenge: 'none'` trên site `challenge_mode: 'slider'` phải ra slider.
-
-### C2. `/v1/siteverify` trả `success: true` khi có lỗi nội bộ (fail-open)
-- **Vị trí:** `backend/src/verify/verify.service.ts:172-183`
-- **Lỗi:** mọi exception (DB/Redis quá tải, mất kết nối) đều trả `success: true, score: 0` — kể cả khi secret sai và token bịa.
-- **Khai thác:** pool Postgres chỉ 30 kết nối, các endpoint public (`/v1/siteverify`, `/v1/issue` với key ngẫu nhiên, `/admin/v1/auth/login`) đều query DB và không có rate-limit → flood cho cạn pool, lúc đó backend của khách gọi siteverify với `verify_token: "x"` vẫn nhận `success: true`.
-- **Cách fix:** nhánh `catch` trả HTTP 503 `{ "error": { "code": "service_unavailable", ... } }` hoặc `success: false`. Việc fail-open (nếu muốn) để backend của khách tự quyết khi nhận 5xx/timeout — đúng như API_CONTRACT mục 1.3 khuyến nghị. Log chỉ `err.code`/`err.message`, không log nguyên `err` (xem L2).
-
-### C3. Giả mạo IP qua `X-Forwarded-For`
-- **Vị trí:** `nginx/conf.d/vina-captcha.conf:49,65`, template trong `ssl.sh` (2 chỗ), `backend/src/issue/issue.controller.ts:31`, `backend/src/verify/verify.controller.ts:16`
-- **Lỗi:** nginx dùng `$proxy_add_x_forwarded_for` (nối thêm vào header client gửi), backend lấy **phần tử đầu tiên** = giá trị client tự điền.
-- **Khai thác:** đổi `X-Forwarded-For` mỗi request → vô hiệu rate-limit, IP ban, threat-intel, ip_reputation. Hoặc gửi nhiều lần verify sai với `X-Forwarded-For: <IP nạn nhân>` → IP nạn nhân bị ban trên mọi site. Giá trị không phải IP (`abc`) làm lỗi cast `::inet` → không ghi log.
-- **Cách fix:**
-  1. nginx (cả `vina-captcha.conf` lẫn template trong `ssl.sh`): `proxy_set_header X-Forwarded-For $remote_addr;`. Nếu có CDN phía trước: dùng `set_real_ip_from <dải IP CDN>; real_ip_header X-Forwarded-For;`.
-  2. Backend: dùng `request.ip` (Fastify `trustProxy` giới hạn đúng IP/subnet của gateway), kiểm tra bằng `net.isIP()`; bỏ fallback `client_reported_ip` ngoài môi trường dev.
+Hiện không còn lỗi Critical đã biết.
 
 ---
 
@@ -168,7 +163,7 @@ Mức độ:
 | ID | Vị trí | Lỗi | Cách fix |
 |---|---|---|---|
 | L1 | `backend/src/main.ts` | Không có global exception filter → lỗi trả `{statusCode, message, error}` thay vì `{ "error": { "code", "message" } }` theo API_CONTRACT mục 3; header `X-RateLimit-*` chưa được set | Thêm `ExceptionFilter` toàn cục map về đúng format |
-| L2 | `verify.service.ts:173` và nhiều nơi | `console.error(err)` có thể in `QueryFailedError.parameters` chứa `secret` plaintext (vi phạm AGENTS.md 3.4); log chuỗi tự do | Chỉ log `err.code`/`err.message` + `key_prefix`; dùng logger JSON |
+| L2 | Nhiều nơi trong backend (riêng `siteVerify` đã sửa ở `e85db7b`) | `console.error(err)` có thể in `QueryFailedError.parameters` chứa dữ liệu nhạy cảm (vi phạm AGENTS.md 3.4); log chuỗi tự do | Chỉ log `err.code`/`err.message` + `key_prefix`; dùng logger JSON |
 | L3 | `jobs/quota-sync.job.ts:34`, `redis/redis.service.ts:131` | Dùng lệnh `KEYS` (O(N), block Redis đang phục vụ issue/verify) | Dùng `SCAN` hoặc set index riêng |
 | L4 | `backend/src/jobs/*` | Cron chạy trên **mọi** instance → trùng job sync threat-intel, email cảnh báo quota gửi trùng khi scale | Distributed lock trên Redis (`SET NX PX`) trước khi chạy job |
 | L5 | ~9 file dashboard (`pages/dashboard`, `sites/list.tsx`, `ip-reputation`, `threat-intel`, `smtp-settings`, `accounts/list.tsx`, `components/header`…) | Gọi `axios` trực tiếp, ngoài Refine data provider (vi phạm AGENTS.md); KPI trang Sites tính trên dữ liệu 1 trang | Chuyển sang `useList`/`useTable`/`useCustom`, lọc phía server |
@@ -181,7 +176,7 @@ Mức độ:
 
 ## Thứ tự xử lý đề xuất
 
-1. **C1, C2, C3** — mỗi mục là thay đổi nhỏ, ảnh hưởng trực tiếp tới chức năng chống bot.
+1. ~~**C1, C2, C3**~~ — đã sửa (`e85db7b`).
 2. **H6** — có hạn chót (01/01/2027); tạm thời chạy SQL trong DEPLOYMENT.md, sau đó viết job.
 3. **H1, H5** — cứng hóa cấu hình khởi động (`JWT_SECRET` bắt buộc, `SETUP_TOKEN`).
 4. **H3, M11** — sửa `docker-compose.yml`/Dockerfile để deploy được trên domain bất kỳ.
