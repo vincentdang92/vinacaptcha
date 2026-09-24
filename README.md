@@ -41,6 +41,8 @@
 
 ## ⚡ 2. Cài Đặt Tự Động 1 Lệnh (Khuyến Nghị Cho VPS)
 
+> Hướng dẫn production đầy đủ (chuẩn bị `.env`, SSL, cập nhật, sao lưu, failover): [DEPLOYMENT.md](DEPLOYMENT.md). Lỗi đã biết và cách xử lý: [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
 Chỉ cần SSH vào máy chủ VPS Ubuntu mới của bạn (dưới quyền `root` hoặc `sudo`) và chạy lệnh duy nhất sau:
 
 ```bash
@@ -60,7 +62,7 @@ curl -fsSL https://raw.githubusercontent.com/vincentdang92/vinacaptcha/main/inst
 Sau khi trỏ tên miền (VD: `captcha.domaincuaban.com`) về IP VPS, chạy script kích hoạt SSL:
 
 ```bash
-sudo /opt/vinacaptcha/ssl.sh captcha.domaincuaban.com your-email@domain.com
+cd /opt/vinacaptcha && sudo ./ssl.sh captcha.domaincuaban.com your-email@domain.com
 ```
 
 *Script sẽ tự động cấp chứng chỉ Let's Encrypt SSL, chuyển hướng toàn bộ HTTP sang HTTPS 443 và tạo Cronjob tự động gia hạn chứng chỉ vào 3:00 AM hàng ngày.*
@@ -385,7 +387,7 @@ Các lệnh thực thi trong thư mục `/opt/vinacaptcha` trên VPS:
 
 ### 3. Lỗi Cấp SSL Certbot Thất Bại
 - **Nguyên nhân**: Bản ghi DNS (A Record) của tên miền chưa trỏ đúng về địa chỉ IP của VPS.
-- **Cách khắc phục**: Dùng `ping yourdomain.com` trên máy tính để kiểm tra IP đã nhận diện đúng IP VPS chưa, sau đó chạy lại lệnh `sudo /opt/vinacaptcha/ssl.sh <domain> <email>`.
+- **Cách khắc phục**: Dùng `ping yourdomain.com` trên máy tính để kiểm tra IP đã nhận diện đúng IP VPS chưa, sau đó chạy lại lệnh `cd /opt/vinacaptcha && sudo ./ssl.sh <domain> <email>`.
 
 ---
 
