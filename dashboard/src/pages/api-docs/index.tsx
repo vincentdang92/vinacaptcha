@@ -48,6 +48,7 @@ Tài liệu này cung cấp hướng dẫn đầy đủ và các đoạn mã m�
    - Server nhận \`vina_captcha_token\` từ request submit của client.
    - Gửi request \`POST \${BASE_URL}/v1/siteverify\` kèm \`secret\` (Secret Key \`cap_live_...\`) và \`verify_token\` với **Timeout tối đa 5 giây (5000ms)**.
    - **Giai đoạn thử nghiệm (Testing/Trial Mode)**: Nếu request bị treo quá 5s hoặc máy chủ Captcha trả về lỗi hệ thống (5xx), Backend của bạn nên **ƯU TIÊN CHO PASS (\`success: true\`)** để không gián đoạn giao dịch của người dùng thật.
+   - **Tuyệt đối không cho pass khi nhận mã 4xx hoặc khi form không có token** — chỉ áp dụng cho 5xx/timeout. Điều kiện kiểu \`if (!res.ok)\` coi cả 4xx là "server lỗi": bot chỉ cần gửi form không kèm token là vượt captcha. Server luôn trả HTTP 200 \`{"success": false}\` cho token thiếu/sai.
    - Nếu \`success: true\` → Cho phép xử lý tiếp (Login, Register, Thanh toán...).
    - Nếu \`success: false\` → Chặn và báo lỗi "Xác thực Captcha thất bại".
 
@@ -121,6 +122,12 @@ class NhanHoaCaptcha implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
+        // Form không kèm token (bot bỏ qua widget) -> chặn luôn, không gọi siteverify
+        if (!is_string($value) || trim($value) === '') {
+            $fail('Vui lòng hoàn thành xác thực NhanHoaCaptcha.');
+            return;
+        }
+
         try {
             // Cài đặt timeout 5 giây
             $response = Http::timeout(5)->asJson()->post(config('services.vinacaptcha.base_url', 'https://your-captcha-domain.com') . '/v1/siteverify', [
@@ -128,8 +135,8 @@ class NhanHoaCaptcha implements ValidationRule
                 'verify_token' => $value,
             ]);
 
-            // Nếu máy chủ captcha trả về lỗi 5xx trong giai đoạn thử nghiệm -> Ưu tiên cho pass
-            if (!$response->successful()) {
+            // Chỉ cho qua khi máy chủ captcha lỗi 5xx trong giai đoạn thử nghiệm — KHÔNG cho qua với mã 4xx
+            if ($response->serverError()) {
                 Log::warning('[NhanHoaCaptcha] Server error, fail-open fallback applied.');
                 return;
             }
@@ -232,7 +239,7 @@ import { Request, Response, NextFunction } from 'express';
 
 export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: NextFunction) {
   const token = req.body.vina_captcha_token || req.headers['x-vina-token'];
-  if (!token) {
+  if (typeof token !== 'string' || !token.trim()) {
     return res.status(400).json({ error: 'Missing NhanHoaCaptcha token (vina_captcha_token)' });
   }
 
@@ -252,8 +259,13 @@ export async function verifyNhanHoaCaptcha(req: Request, res: Response, next: Ne
     }
     return res.status(403).json({ error: 'Captcha verification failed', reason: response.data?.reason });
   } catch (err: any) {
-    // Fallback: Nếu hệ thống treo > 5s hoặc lỗi mạng -> Ưu tiên SUCCESS trong giai đoạn thử nghiệm
-    console.warn('[NhanHoaCaptcha] Siteverify timeout (>5s) or error, applying fail-open fallback:', err.message);
+    // axios ném lỗi với mọi mã khác 2xx: mã 4xx KHÔNG phải sự cố của server captcha -> chặn
+    const status = err.response?.status;
+    if (status && status < 500) {
+      return res.status(403).json({ error: 'Captcha verification failed' });
+    }
+    // Fallback: Nếu hệ thống treo > 5s, lỗi mạng hoặc lỗi 5xx -> Ưu tiên SUCCESS trong giai đoạn thử nghiệm
+    console.warn('[NhanHoaCaptcha] Siteverify timeout (>5s) or 5xx error, applying fail-open fallback:', err.message);
     return next(); // Cho phép tiếp tục luồng xử lý
   }
 }
@@ -568,6 +580,7 @@ export const ApiDocsPage = () => {
             description={
               <div>
                 Trong giai đoạn thử nghiệm (Testing/Trial Mode), nếu kết nối tới máy chủ Captcha bị <strong>treo quá 5 giây (Timeout &gt; 5s)</strong> hoặc server captcha gặp lỗi 5xx, backend của bạn nên <strong>ƯU TIÊN CHO PASS (success: true)</strong> để tránh làm gián đoạn trải nghiệm hoặc chặn người dùng thật.
+                Tuyệt đối <strong>không cho pass khi nhận mã 4xx hoặc khi form không có token</strong> — bot chỉ cần gửi form không kèm token là vượt captcha nếu code coi mọi mã khác 2xx là lỗi server.
               </div>
             }
             style={{ marginBottom: 16 }}
@@ -582,6 +595,11 @@ export const ApiDocsPage = () => {
                 label: "Node.js (Express / Fetch)",
                 children: (
                   <CodeBlock lang="js" code={`const verifyToken = async (vinaToken, siteSecretKey) => {
+  // Form không kèm token (bot bỏ qua widget) -> chặn luôn, không gọi siteverify
+  if (typeof vinaToken !== 'string' || !vinaToken.trim()) {
+    return { success: false, reason: 'missing_verify_token' };
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // ⏱️ Timeout 5s
@@ -597,8 +615,8 @@ export const ApiDocsPage = () => {
     });
     clearTimeout(timeoutId);
 
-    if (!resp.ok) {
-      // 🛡️ Fallback: Server lỗi 5xx trong giai đoạn thử nghiệm -> Cho qua
+    if (resp.status >= 500) {
+      // 🛡️ Fallback: CHỈ khi server lỗi 5xx trong giai đoạn thử nghiệm -> Cho qua (không áp dụng cho 4xx)
       console.warn('[NhanHoaCaptcha] Server status >= 500, ưu tiên cho pass trong lúc thử nghiệm.');
       return { success: true, fallback: true };
     }
@@ -633,6 +651,11 @@ app.post('/login', async (req, res) => {
                 children: (
                   <CodeBlock lang="php" code={`<?php
 function verifyNhanHoaCaptcha(string $vinaToken, string $siteSecret): array {
+    // Form không kèm token (bot bỏ qua widget) -> chặn luôn, không gọi siteverify
+    if (trim($vinaToken) === '') {
+        return ['success' => false, 'reason' => 'missing_verify_token'];
+    }
+
     $payload = json_encode([
         'secret'       => $siteSecret,  // cap_live_...
         'verify_token' => $vinaToken,
@@ -644,22 +667,26 @@ function verifyNhanHoaCaptcha(string $vinaToken, string $siteSecret): array {
             'header'  => "Content-Type: application/json\\r\\n",
             'content' => $payload,
             'timeout' => 5, // ⏱️ Timeout tối đa 5 giây
+            'ignore_errors' => true, // Đọc được body + mã HTTP của cả phản hồi 4xx/5xx (không thì trả false)
         ]
     ]);
 
-    try {
-        $result = @file_get_contents('${BASE_URL}/v1/siteverify', false, $context);
-        if ($result === false) {
-            // 🛡️ Fallback: Treo > 5s hoặc lỗi mạng -> Ưu tiên pass trong giai đoạn thử nghiệm
-            error_log('[NhanHoaCaptcha] Timeout > 5s or connection error, fail-open applied.');
-            return ['success' => true, 'fallback' => true];
-        }
-
-        $data = json_decode($result, true);
-        return $data ?: ['success' => true, 'fallback' => true];
-    } catch (\\Throwable $e) {
+    $result = @file_get_contents('${BASE_URL}/v1/siteverify', false, $context);
+    if ($result === false) {
+        // 🛡️ Fallback: Treo > 5s hoặc lỗi mạng -> Ưu tiên pass trong giai đoạn thử nghiệm
+        error_log('[NhanHoaCaptcha] Timeout > 5s or connection error, fail-open applied.');
         return ['success' => true, 'fallback' => true];
     }
+
+    // Mã HTTP nằm ở dòng đầu, VD "HTTP/1.1 503 Service Unavailable"
+    $status = (int) (explode(' ', $http_response_header[0] ?? '')[1] ?? 0);
+    if ($status >= 500) {
+        // 🛡️ Fallback: CHỈ khi server captcha lỗi 5xx — không áp dụng cho mã 4xx
+        return ['success' => true, 'fallback' => true];
+    }
+
+    $data = json_decode($result, true);
+    return is_array($data) ? $data : ['success' => false];
 }
 
 // Trong form handler:

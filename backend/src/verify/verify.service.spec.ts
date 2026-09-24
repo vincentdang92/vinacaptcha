@@ -168,6 +168,28 @@ describe('VerifyService', () => {
   });
 
   describe('siteVerify', () => {
+    it.each([
+      [undefined, 'missing_verify_token'],
+      ['', 'missing_verify_token'],
+      ['   ', 'missing_verify_token'],
+      [123, 'missing_verify_token'],
+      [{ $ne: null }, 'missing_verify_token'],
+    ])('should return success:false without touching DB/Redis when verify_token is %j', async (verify_token, reason) => {
+      const result = await service.siteVerify({ secret: 'cap_live_good', verify_token });
+      expect(result).toEqual({ success: false, reason });
+      expect(mockDataSource.query).not.toHaveBeenCalled();
+      expect(mockRedisService.useOneTimeToken).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, null, 'not-an-object', {}, { secret: '' }, { secret: 42, verify_token: 'vt_x' }])(
+      'should return success:false (missing_secret) for body %j',
+      async (body) => {
+        const result = await service.siteVerify(body as any);
+        expect(result).toEqual({ success: false, reason: 'missing_secret' });
+        expect(mockDataSource.query).not.toHaveBeenCalled();
+      },
+    );
+
     it('should fail if secret is invalid', async () => {
       mockDataSource.query.mockResolvedValue([]);
       const result = await service.siteVerify({ secret: 'bad', verify_token: '123' });
