@@ -191,9 +191,22 @@ server {
 }
 EOF
 
-# 7. KHỞI ĐỘNG LẠI NGINX GATEWAY
-echo -e "🚀 [5/5] Khởi động lại dịch vụ Gateway với cấu hình SSL mới..."
-docker compose up -d gateway
+# Ghi APP_URL để link kích hoạt tài khoản / đặt lại mật khẩu trong email luôn trỏ về domain HTTPS,
+# không phụ thuộc header Host của request (chống host header poisoning)
+if [ -f .env ]; then
+    if grep -q '^APP_URL=' .env; then
+        $SUDO sed -i.bak "s|^APP_URL=.*|APP_URL=https://$DOMAIN|" .env && $SUDO rm -f .env.bak
+    else
+        printf '\nAPP_URL=https://%s\n' "$DOMAIN" | $SUDO tee -a .env > /dev/null
+    fi
+    echo -e "  ${GREEN}✓${NC} Đã đặt APP_URL=https://$DOMAIN trong .env"
+else
+    echo -e "  ${YELLOW}⚠️ Không tìm thấy .env — hãy tự thêm APP_URL=https://$DOMAIN rồi chạy lại backend.${NC}"
+fi
+
+# 7. KHỞI ĐỘNG LẠI NGINX GATEWAY & BACKEND (nạp APP_URL mới)
+echo -e "🚀 [5/5] Khởi động lại Gateway và Backend với cấu hình SSL mới..."
+docker compose up -d backend gateway
 
 # 8. THIẾT LẬP TỰ ĐỘNG GIA HẠN SSL (CRONJOB)
 CURRENT_CRON=$($SUDO crontab -l 2>/dev/null || true)

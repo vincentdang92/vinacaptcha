@@ -118,6 +118,43 @@ describe('AdminService', () => {
     });
   });
 
+  describe('activateAccount', () => {
+    const validToken = 'a'.repeat(64);
+
+    it('should reject empty, non-string or malformed tokens without querying the database', async () => {
+      let queried = false;
+      mockRepo.findOneBy = () => {
+        queried = true;
+        return Promise.resolve({ id: 'acc-1', activation_token: '' });
+      };
+
+      for (const token of ['', undefined, { $ne: null }, 'not-a-hex-token']) {
+        await expect(service.activateAccount(token)).rejects.toThrow('Liên kết kích hoạt không hợp lệ');
+      }
+      expect(queried).toBe(false);
+    });
+
+    it('should reject a token that does not match any account', async () => {
+      mockRepo.findOneBy = () => Promise.resolve(null);
+      await expect(service.activateAccount(validToken)).rejects.toThrow('đã được sử dụng');
+    });
+
+    it('should verify the account and consume the token', async () => {
+      const account = { id: 'acc-2', is_verified: false, activation_token: validToken };
+      let lookup: any;
+      mockRepo.findOneBy = (where: any) => {
+        lookup = where;
+        return Promise.resolve(account);
+      };
+
+      const res = await service.activateAccount(` ${validToken.toUpperCase()} `);
+      expect(lookup).toEqual({ activation_token: validToken });
+      expect(res.success).toBe(true);
+      expect(account.is_verified).toBe(true);
+      expect(account.activation_token).toBe('');
+    });
+  });
+
   describe('forgotPassword', () => {
     it('should return generic success message even if account is not found', async () => {
       mockRepo.findOneBy = () => Promise.resolve(null);

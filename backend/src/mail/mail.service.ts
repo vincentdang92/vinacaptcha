@@ -3,6 +3,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import { SystemSetting } from './entities/system-setting.entity.js';
+import { resolveDashboardBaseUrl } from './dashboard-url.js';
+
+// Tên hiển thị do người dùng tự nhập lúc đăng ký — phải escape trước khi chèn vào HTML email,
+// nếu không kẻ xấu có thể đăng ký bằng email nạn nhân kèm tên chứa link/HTML lừa đảo.
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 export interface SmtpConfig {
   host: string;
@@ -362,21 +374,11 @@ export class MailService implements OnModuleInit {
 
     try {
       const transporter = this.createTransporter();
-      
-      // Tự động nhận diện host/domain từ request incoming hoặc biến môi trường APP_URL
-      let appUrl = requestBaseUrl;
-      if (!appUrl || appUrl.includes('localhost')) {
-        if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
-          appUrl = process.env.APP_URL;
-        } else if (process.env.DASHBOARD_URL && !process.env.DASHBOARD_URL.includes('localhost')) {
-          appUrl = process.env.DASHBOARD_URL;
-        } else {
-          appUrl = requestBaseUrl || process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
-        }
-      }
 
-      appUrl = appUrl.replace(/\/+$/, '');
-      const activationLink = `${appUrl}/admin/v1/auth/activate?token=${token}`;
+      // Link trỏ về trang /activate của Dashboard; trang đó gọi POST /admin/v1/auth/activate
+      const dashboardUrl = (requestBaseUrl || resolveDashboardBaseUrl()).replace(/\/+$/, '');
+      const activationLink = `${dashboardUrl}/activate?token=${encodeURIComponent(token)}`;
+      const safeName = escapeHtml(name);
 
       const fromName = config.from_name;
       const fromEmail = config.from_email;
@@ -392,7 +394,7 @@ export class MailService implements OnModuleInit {
               <h2 style="color: #2563eb; margin: 0; font-size: 22px;">NhanHoaCaptcha</h2>
             </div>
             
-            <p style="color: #334155; font-size: 15px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="color: #334155; font-size: 15px;">Xin chào <strong>${safeName}</strong>,</p>
             <p style="color: #334155; font-size: 14px; line-height: 1.6;">
               Cảm ơn bạn đã đăng ký tài khoản trên hệ thống cổng bảo vệ Captcha nội bộ <strong>NhanHoaCaptcha</strong>.
             </p>
@@ -467,7 +469,7 @@ export class MailService implements OnModuleInit {
           <h2 style="color: ${alertColor}; margin-top: 0; font-size: 20px; display: flex; align-items: center; gap: 8px;">
             <span>⚠️</span> Thông Báo Dung Lượng Captcha
           </h2>
-          <p style="color: #334155;">Xin chào <strong>${name}</strong>,</p>
+          <p style="color: #334155;">Xin chào <strong>${escapeHtml(name)}</strong>,</p>
           <p style="color: #334155;">Hệ thống NhanHoaCaptcha xin thông báo tài khoản của bạn đã đạt mốc <strong>${threshold}%</strong> hạn mức sử dụng trong tháng:</p>
           
           <div style="background-color: #f8fafc; border-left: 4px solid ${alertColor}; padding: 16px; margin: 20px 0; border-radius: 4px; border: 1px solid #e2e8f0; border-left-width: 4px;">
@@ -521,19 +523,9 @@ export class MailService implements OnModuleInit {
     try {
       const transporter = this.createTransporter();
 
-      let appUrl = requestBaseUrl;
-      if (!appUrl || appUrl.includes('localhost')) {
-        if (process.env.APP_URL && !process.env.APP_URL.includes('localhost')) {
-          appUrl = process.env.APP_URL;
-        } else if (process.env.DASHBOARD_URL && !process.env.DASHBOARD_URL.includes('localhost')) {
-          appUrl = process.env.DASHBOARD_URL;
-        } else {
-          appUrl = requestBaseUrl || process.env.APP_URL || process.env.DASHBOARD_URL || 'http://localhost:3068';
-        }
-      }
-
-      appUrl = appUrl.replace(/\/+$/, '');
-      const resetLink = `${appUrl}/reset-password?token=${token}`;
+      const dashboardUrl = (requestBaseUrl || resolveDashboardBaseUrl()).replace(/\/+$/, '');
+      const resetLink = `${dashboardUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      const safeName = escapeHtml(name);
 
       const fromName = config.from_name;
       const fromEmail = config.from_email;
@@ -549,7 +541,7 @@ export class MailService implements OnModuleInit {
               <h2 style="color: #2563eb; margin: 0; font-size: 22px;">NhanHoaCaptcha</h2>
             </div>
             
-            <p style="color: #334155; font-size: 15px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="color: #334155; font-size: 15px;">Xin chào <strong>${safeName}</strong>,</p>
             <p style="color: #334155; font-size: 14px; line-height: 1.6;">
               Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn tại hệ thống <strong>NhanHoaCaptcha</strong>.
             </p>

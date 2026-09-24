@@ -4,6 +4,13 @@ import { MailService } from './mail.service.js';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SystemSetting } from './entities/system-setting.entity.js';
 
+const { sendMailMock } = vi.hoisted(() => ({
+  sendMailMock: vi.fn().mockResolvedValue({ messageId: 'test-message-id' }),
+}));
+vi.mock('nodemailer', () => ({
+  createTransport: () => ({ sendMail: sendMailMock, verify: vi.fn().mockResolvedValue(true) }),
+}));
+
 describe('MailService', () => {
   let service: MailService;
   const originalEnv = process.env;
@@ -134,5 +141,42 @@ describe('MailService', () => {
     });
     expect(result.success).toBe(false);
     expect(result.message).toContain('chưa nhập Mật khẩu');
+  });
+
+  describe('sendActivationEmail', () => {
+    const token = 'b'.repeat(64);
+
+    beforeEach(() => {
+      process.env.SMTP_HOST = 'mail.nhanhoa.com';
+      process.env.SMTP_USER = 'admin@nhanhoa.com';
+      process.env.SMTP_PASS = 'secret';
+      delete process.env.APP_URL;
+      delete process.env.DASHBOARD_URL;
+    });
+
+    it('links to the dashboard /activate page instead of the backend API route', async () => {
+      const result = await service.sendActivationEmail('user@example.com', 'User', token, 'https://captcha.example.com/');
+      expect(result.success).toBe(true);
+
+      const html: string = sendMailMock.mock.calls.at(-1)?.[0].html;
+      expect(html).toContain(`https://captcha.example.com/activate?token=${token}`);
+      expect(html).not.toContain('/admin/v1/auth/activate');
+    });
+
+    it('falls back to the configured public URL when no request base URL is given', async () => {
+      process.env.APP_URL = 'https://captcha.example.com';
+      await service.sendActivationEmail('user@example.com', 'User', token);
+
+      const html: string = sendMailMock.mock.calls.at(-1)?.[0].html;
+      expect(html).toContain(`https://captcha.example.com/activate?token=${token}`);
+    });
+
+    it('escapes the user-supplied name', async () => {
+      await service.sendActivationEmail('user@example.com', '<a href="https://evil.com">Nhận quà</a>', token, 'https://captcha.example.com');
+
+      const html: string = sendMailMock.mock.calls.at(-1)?.[0].html;
+      expect(html).not.toContain('<a href="https://evil.com">');
+      expect(html).toContain('&lt;a href=&quot;https://evil.com&quot;&gt;');
+    });
   });
 });

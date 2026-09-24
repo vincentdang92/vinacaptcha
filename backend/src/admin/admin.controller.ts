@@ -4,6 +4,7 @@ import { AdminService } from './admin.service.js';
 import { ThreatIntelService } from '../threat-intel/threat-intel.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
+import { getConfiguredDashboardUrl, resolveDashboardBaseUrl } from '../mail/dashboard-url.js';
 
 @Controller('admin/v1')
 export class AdminController {
@@ -37,28 +38,24 @@ export class AdminController {
     if (!body?.email || !body?.password || !body?.name) {
       throw new BadRequestException('Email, mật khẩu và tên là bắt buộc');
     }
-    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers['host'];
-    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+    const dashboardBaseUrl = resolveDashboardBaseUrl(req.headers);
 
-    return this.adminService.register(body.email, body.password, body.name, requestBaseUrl, body.captcha_token);
+    return this.adminService.register(body.email, body.password, body.name, dashboardBaseUrl, body.captcha_token);
   }
 
+  @Post('auth/activate')
+  async activate(@Body() body: any) {
+    return this.adminService.activateAccount(body?.token);
+  }
+
+  // Link kích hoạt dạng cũ (/admin/v1/auth/activate?token=...) trong các email đã gửi trước đây:
+  // chỉ chuyển hướng sang trang /activate của Dashboard, trang đó mới gọi POST để kích hoạt.
+  // Không kích hoạt ngay trên GET vì trình quét link của mail server có thể tiêu thụ token trước người dùng.
   @Get('auth/activate')
-  async activate(@Query('token') token: string, @Req() req: any, @Res() res: any) {
-    if (!token) {
-      throw new BadRequestException('Thiếu token kích hoạt');
-    }
-    await this.adminService.activateAccount(token);
-
-    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers['host'];
-    const dashboardUrl = (process.env.APP_URL && !process.env.APP_URL.includes('localhost'))
-      ? process.env.APP_URL
-      : (process.env.DASHBOARD_URL || (host ? `${proto}://${host}` : ''));
-
-    const redirectUrl = dashboardUrl ? `${dashboardUrl.replace(/\/+$/, '')}/login?activated=true` : '/login?activated=true';
-    return res.redirect(redirectUrl);
+  async legacyActivateLink(@Query('token') token: string, @Res() res: any) {
+    const dashboardUrl = getConfiguredDashboardUrl() ?? '';
+    const query = typeof token === 'string' && token ? `?token=${encodeURIComponent(token)}` : '';
+    return res.redirect(`${dashboardUrl}/activate${query}`);
   }
 
   @Post('auth/forgot-password')
@@ -66,11 +63,9 @@ export class AdminController {
     if (!body?.email) {
       throw new BadRequestException('Email là bắt buộc');
     }
-    const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers['host'];
-    const requestBaseUrl = host ? `${proto}://${host}` : undefined;
+    const dashboardBaseUrl = resolveDashboardBaseUrl(req.headers);
 
-    return this.adminService.forgotPassword(body.email, requestBaseUrl, body.captcha_token);
+    return this.adminService.forgotPassword(body.email, dashboardBaseUrl, body.captcha_token);
   }
 
   @Post('auth/reset-password')

@@ -194,6 +194,17 @@ Base path `/admin/v1`. Auth: JWT trong header `Authorization: Bearer <access_tok
 { "refresh_token": "..." }
 ```
 
+**`POST /admin/v1/auth/activate`** — kích hoạt tài khoản sau đăng ký (public, không cần JWT)
+
+Email kích hoạt chứa link tới trang Dashboard `<DASHBOARD_URL|APP_URL>/activate?token=<64 hex>`; trang này gọi endpoint dưới đây rồi chuyển về `/login?activated=true`. Link dạng cũ `GET /admin/v1/auth/activate?token=...` chỉ còn chuyển hướng (302) sang trang `/activate`, không tự kích hoạt.
+```json
+// request
+{ "token": "<64 ký tự hex>" }
+// response 201
+{ "success": true, "message": "Tài khoản đã được kích hoạt thành công." }
+// response 400: token sai định dạng, không tồn tại hoặc đã dùng
+```
+
 ### 2.2 Sites — CRUD
 
 | Method | Path | Ghi chú |
