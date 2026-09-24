@@ -87,7 +87,7 @@ Tự tạo `.env` thay vì để `deploy.sh` tạo vì `deploy.sh` không ghi `A
 |---|---|---|
 | `POSTGRES_PASSWORD` | ✔ | Ngẫu nhiên. **Không đổi sau lần deploy đầu** — Postgres đã khởi tạo volume với mật khẩu cũ, đổi trong `.env` sẽ làm backend mất kết nối DB. |
 | `JWT_SECRET` | ✔ | ≥ 32 ký tự ngẫu nhiên. Tuyệt đối không để giá trị mẫu trong `.env.example` — backend không kiểm tra, ai biết giá trị mẫu là ký được token admin **[H1]**. Đổi giá trị = mọi phiên đăng nhập hết hiệu lực. |
-| `APP_SALT` | ✔ (cài mới) | Chỉ đặt **trước khi tạo tài khoản đầu tiên**. Server đang chạy mà chưa có `APP_SALT` thì **KHÔNG thêm vào** (mọi mật khẩu cũ sẽ sai). |
+| `APP_SALT` | ✔ (cài mới) | Cài mới: đặt **trước khi tạo tài khoản đầu tiên**. Server đang chạy mà chưa có `APP_SALT`: chỉ được thêm với giá trị **đúng bằng `JWT_SECRET` hiện tại** (mật khẩu cũ vẫn khớp, và từ đó đổi `JWT_SECRET` không còn khóa user) — giá trị khác sẽ làm mọi mật khẩu cũ sai. Lệnh: `grep -q '^APP_SALT=' .env \|\| echo "APP_SALT=$(grep '^JWT_SECRET=' .env \| cut -d= -f2-)" >> .env` |
 | `APP_URL` | Nên có | URL công khai, dùng cho link kích hoạt tài khoản / đặt lại mật khẩu trong email. `ssl.sh` tự ghi `https://<domain>`. Chạy bằng IP không SSL: `http://<IP>` (thêm `:PORT_HTTP` nếu khác 80). Để trống thì backend tự nhận diện theo request — kém an toàn hơn. |
 | `PORT_HTTP` | | Mặc định 80. `PORT_HTTPS` mặc định 443 (không có trong `.env.example`, thêm nếu cần). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Để gửi email | Có thể cấu hình ở Dashboard → Cài đặt SMTP (lưu trong DB, ưu tiên hơn `.env`). Không có SMTP thì người dùng tự đăng ký sẽ **không nhận được link kích hoạt**. |

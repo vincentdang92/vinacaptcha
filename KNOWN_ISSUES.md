@@ -99,7 +99,7 @@ Mức độ:
 - **Lỗi:** SHA-256 một vòng, salt dùng chung toàn hệ thống (`APP_SALT` → `JWT_SECRET` → chuỗi hardcode), so sánh bằng `!==`. `deploy.sh` sinh `RAND_SALT` nhưng **không ghi** vào `.env`, nên salt = `JWT_SECRET`.
 - **Ảnh hưởng:** đổi `JWT_SECRET` (VD khi nghi bị lộ) → **mọi mật khẩu, kể cả admin, không còn khớp**. Hash bị lộ thì bẻ nhanh.
 - **Cách fix:** chuyển sang argon2id/scrypt với salt riêng từng user, `timingSafeEqual`; migrate dần (khi user đăng nhập thành công bằng hash cũ thì băm lại bằng thuật toán mới). `deploy.sh` ghi `APP_SALT` cho cài đặt mới.
-- **Lưu ý cho server đang chạy:** KHÔNG thêm `APP_SALT` và KHÔNG đổi `JWT_SECRET` cho tới khi đã migrate hash — nếu không toàn bộ user bị khóa.
+- **Lưu ý cho server đang chạy:** hash hiện tại dùng `JWT_SECRET` làm salt. Chỉ được thêm `APP_SALT` với giá trị **đúng bằng `JWT_SECRET` hiện tại** (không đổi hành vi, và tách salt khỏi JWT secret để sau này đổi `JWT_SECRET` an toàn). Thêm `APP_SALT` giá trị khác, hoặc đổi `JWT_SECRET` khi chưa có `APP_SALT` → toàn bộ user bị khóa.
 
 ### M2. `password_hash` và `activation_token` bị trả ra qua API
 - **Vị trí:** `backend/src/admin/entities/account.entity.ts:14,29`, `admin.service.ts:1096` (`getAccountById` cho `/auth/me`), các chỗ load `relations: { account: true }` của sites, `GET /accounts`
