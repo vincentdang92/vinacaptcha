@@ -1,6 +1,6 @@
 # KNOWN_ISSUES.md — Lỗi đã biết & hướng xử lý
 
-> Cập nhật: 2026-09-24 · Audit trên commit `f13ae50`; đã sửa thêm C1–C3 ở `e85db7b` (nhánh `fix/critical-captcha-bypass`).
+> Cập nhật: 2026-09-24 · Audit trên commit `f13ae50`; đã sửa thêm C1–C3 ở `e85db7b` và C4 ở `986d8fc` (nhánh `fix/critical-captcha-bypass`).
 > Mọi mục bên dưới đã được đối chiếu với code thật (file:dòng tại thời điểm audit).
 > Khi sửa xong một mục: chuyển nó sang phần **Đã sửa**, ghi commit hash.
 
@@ -34,6 +34,11 @@ Mức độ:
 - **Lỗi cũ:** nginx nối thêm vào header client gửi, backend lấy phần tử đầu tiên = giá trị client tự điền → vượt rate-limit/ban, gài ban IP người khác.
 - **Đã sửa:** Fastify `trustProxy` chỉ tin hop loopback/link-local/private (`backend/src/common/client-ip.ts`), controller dùng `request.ip`; IP sai định dạng → `0.0.0.0`; `client_reported_ip` chỉ dùng ở dev. nginx (`vina-captcha.conf` + template `ssl.sh`) ghi đè `X-Forwarded-For $remote_addr`. Test tích hợp qua Fastify thật: `client-ip.spec.ts`.
 - **Việc còn lại khi deploy:** server đã bật SSL vẫn giữ `nginx/conf.d/ssl.conf` cũ (nối header) — backend mới đã tự bỏ qua phần client gửi nên vẫn an toàn; muốn đồng bộ thì chạy lại `./ssl.sh <domain> <email>` (gateway gián đoạn vài giây). Nếu đặt CDN (Cloudflare…) trước gateway: cần cấu hình `set_real_ip_from` + `real_ip_header` trong nginx, nếu không mọi người dùng sẽ mang IP của CDN.
+
+### ✅ C4. Vượt captcha qua code mẫu tích hợp: siteverify trả 400 cho token thiếu — `986d8fc`
+- **Lỗi cũ:** `/v1/siteverify` dùng class-validator nên `verify_token` thiếu / rỗng / sai kiểu trả **HTTP 400**. Code mẫu Node (fetch, axios), Laravel và PHP thuần trong README / API Docs lại cho qua với mọi mã khác 2xx (`if (!res.ok)`, `!$response->successful()`, axios ném lỗi → `next()`, `file_get_contents` trả `false`) → bot gửi form **không kèm `vina_captcha_token`** là vượt captcha trên site khách. Phát hiện từ log production: 201 / 2.017 lượt siteverify trả 400 trong 4 ngày (20–24/09/2026).
+- **Đã sửa:** siteverify tự kiểm tra input, luôn trả 200 `{ "success": false, "reason": "missing_secret" | "missing_verify_token" }` cho input xấu (không 4xx), field thừa không còn gây 400; lỗi nội bộ vẫn 503. Code mẫu chỉ fail-open khi 5xx/timeout và từ chối ngay khi form không có token. API_CONTRACT 1.3 bổ sung bảng `reason`.
+- **Ảnh hưởng tới khách hàng:** khách đang dùng code mẫu lỗi được bảo vệ ngay khi server deploy, không cần sửa code. Đổi lại, người dùng thật có widget gặp lỗi (đóng slider, mất mạng — xem M9) sẽ bị từ chối thay vì lọt qua như trước, và phải thử lại. Vẫn nên khuyên khách cập nhật code theo mẫu mới.
 
 ---
 
@@ -176,7 +181,7 @@ Hiện không còn lỗi Critical đã biết.
 
 ## Thứ tự xử lý đề xuất
 
-1. ~~**C1, C2, C3**~~ — đã sửa (`e85db7b`).
+1. ~~**C1, C2, C3, C4**~~ — đã sửa (`e85db7b`, `986d8fc`).
 2. **H6** — có hạn chót (01/01/2027); tạm thời chạy SQL trong DEPLOYMENT.md, sau đó viết job.
 3. **H1, H5** — cứng hóa cấu hình khởi động (`JWT_SECRET` bắt buộc, `SETUP_TOKEN`).
 4. **H3, M11** — sửa `docker-compose.yml`/Dockerfile để deploy được trên domain bất kỳ.

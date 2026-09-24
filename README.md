@@ -225,13 +225,20 @@ Phù hợp cho các form cần hiện Loading Spinner, Modal hoặc xử lý AJA
 
 Khi form gửi về Server của bạn, Backend lấy trường `vina_captcha_token` và gửi request xác minh server-to-server.
 
-> 🛡️ **Khuyến nghị Fail-Open Fallback (Thử Nghiệm)**: Cài đặt **Timeout 5 giây (5000ms)** cho request gọi sang `/v1/siteverify`. Nếu hệ thống captcha bị treo quá 5s hoặc trả mã lỗi 5xx trong giai đoạn thử nghiệm, backend nên **ưu tiên cho pass (`success: true`)** để không gián đoạn thao tác của khách hàng thật.
+> 🛡️ **Khuyến nghị Fail-Open Fallback (Thử Nghiệm)**: Cài đặt **Timeout 5 giây (5000ms)** cho request gọi sang `/v1/siteverify`. Nếu hệ thống captcha bị treo quá 5s hoặc trả mã lỗi **5xx** trong giai đoạn thử nghiệm, backend nên **ưu tiên cho pass (`success: true`)** để không gián đoạn thao tác của khách hàng thật.
+>
+> ⚠️ **Chỉ cho qua khi gặp 5xx hoặc timeout — tuyệt đối không cho qua khi gặp mã 4xx hoặc khi form không có token.** Điều kiện kiểu `if (!res.ok)` / `!$response->successful()` coi cả 4xx là "server lỗi": bot chỉ cần gửi form không kèm `vina_captcha_token` là vượt captcha. Server luôn trả HTTP 200 `{"success": false, ...}` cho token thiếu/sai.
 
 #### 🟢 **Node.js / Express**:
 ```javascript
 app.post('/api/login', async (req, res) => {
   const token = req.body.vina_captcha_token;
-  
+
+  // Form không kèm token (bot bỏ qua widget) -> chặn luôn, không gọi siteverify
+  if (typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ error: "Vui lòng hoàn thành xác thực Captcha" });
+  }
+
   let isPassed = false;
   try {
     const controller = new AbortController();
@@ -248,7 +255,8 @@ app.post('/api/login', async (req, res) => {
     });
     clearTimeout(timeoutId);
 
-    if (!verifyRes.ok) {
+    if (verifyRes.status >= 500) {
+      // Chỉ cho qua khi server captcha lỗi 5xx — KHÔNG cho qua với mã 4xx
       console.warn("[NhanHoaCaptcha] Server 5xx error, ưu tiên cho pass trong giai đoạn thử nghiệm.");
       isPassed = true; // Fallback pass
     } else {
@@ -273,14 +281,20 @@ app.post('/api/login', async (req, res) => {
 ```php
 public function handleLogin(Request $request)
 {
+    // Form không kèm token (bot bỏ qua widget) -> chặn luôn, không gọi siteverify
+    $token = (string) $request->input('vina_captcha_token', '');
+    if (trim($token) === '') {
+        return back()->withErrors(['captcha' => 'Vui lòng hoàn thành xác thực Captcha']);
+    }
+
     try {
         $response = Http::timeout(5)->asJson()->post('https://captcha.domaincuaban.com/v1/siteverify', [
             'secret'       => config('services.captcha.secret'), // cap_live_...
-            'verify_token' => $request->input('vina_captcha_token'),
+            'verify_token' => $token,
         ]);
 
-        // Nếu captcha server lỗi 5xx trong lúc thử nghiệm -> Cho qua
-        if (!$response->successful()) {
+        // Chỉ cho qua khi captcha server lỗi 5xx trong lúc thử nghiệm — KHÔNG cho qua với mã 4xx
+        if ($response->serverError()) {
             \Log::warning('[NhanHoaCaptcha] Server error, fail-open fallback applied.');
         } elseif (!($response->json('success') ?? false)) {
             return back()->withErrors(['captcha' => 'Xác thực Captcha không hợp lệ hoặc đã hết hạn']);

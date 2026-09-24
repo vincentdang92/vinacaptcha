@@ -152,14 +152,7 @@ Máy chủ backend của khách hàng gọi sang NhanHoaCaptcha để đối so�
 ```
 - Server **không bao giờ** trả `success: true` khi không kiểm tra được token (fail-closed). Trước đây server trả 200 `success: true, fallback: true` — kẻ tấn công có thể chủ động làm quá tải để mọi token bịa đều qua. Việc cho qua hay chặn khi gặp 5xx/timeout do backend của khách quyết định (xem khuyến nghị bên dưới).
 
-**Response — Thất bại**
-```json
-{
-  "success": false,
-  "reason": "invalid_secret"
-}
-```
-hoặc
+**Response 200 — Thất bại** (luôn HTTP 200, kể cả khi input thiếu hoặc sai kiểu)
 ```json
 {
   "success": false,
@@ -167,9 +160,20 @@ hoặc
 }
 ```
 
+| `reason` | Ý nghĩa |
+|---|---|
+| `missing_secret` | Body không có `secret` hoặc `secret` rỗng / không phải chuỗi |
+| `missing_verify_token` | Body không có `verify_token` hoặc rỗng / không phải chuỗi — thường là form gửi lên không kèm token (bot bỏ qua widget) |
+| `invalid_secret` | Secret không tồn tại hoặc đã bị thu hồi |
+| `already_used` | Token không tồn tại, đã hết hạn (60s) hoặc đã được dùng |
+| `site_mismatch` | Token được cấp cho site khác với site của secret |
+
+- `/v1/siteverify` **không trả 4xx** cho input xấu. `verify_token` do người dùng cuối (hoặc bot) kiểm soát; nếu trả 400, các backend coi "mọi mã khác 2xx = server lỗi" sẽ cho qua và captcha bị vượt chỉ bằng cách gửi form không kèm token.
+
 > **🛡️ Khuyến nghị tích hợp phía Client Backend (Fail-Open Fallback)**:
 > - Cài đặt **Timeout tối đa 5000ms (5 giây)** cho request gọi `/v1/siteverify`.
-> - Trong giai đoạn thử nghiệm (Testing/Trial Phase), nếu request bị quá hạn 5s hoặc server captcha trả mã lỗi 5xx, backend khách nên **ưu tiên cho pass (`success: true`)** để không làm gián đoạn trải nghiệm hoặc chặn khách hàng thật.
+> - Trong giai đoạn thử nghiệm (Testing/Trial Phase), nếu request bị quá hạn 5s hoặc server captcha trả mã lỗi **5xx**, backend khách nên **ưu tiên cho pass (`success: true`)** để không làm gián đoạn trải nghiệm hoặc chặn khách hàng thật.
+> - **Chỉ áp dụng cho 5xx/timeout.** Không dùng điều kiện kiểu `if (!res.ok)` / `!$response->successful()` (coi cả 4xx là lỗi server). Form không có token → từ chối ngay, không cần gọi siteverify. Mọi trường hợp còn lại: chỉ cho qua khi `success === true`.
 
 ---
 

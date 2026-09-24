@@ -1,6 +1,7 @@
 import { Body, Controller, Post, HttpCode, HttpStatus, Ip } from '@nestjs/common';
 import { VerifyService } from './verify.service.js';
-import { VerifyDto, SiteVerifyDto } from './dto/verify.dto.js';
+import { VerifyDto } from './dto/verify.dto.js';
+import type { SiteVerifyDto } from './dto/verify.dto.js';
 import { resolveClientIp } from '../common/client-ip.js';
 
 @Controller('v1')
@@ -19,7 +20,9 @@ export class VerifyController {
 
   @Post('siteverify')
   @HttpCode(HttpStatus.OK)
-  async siteVerify(@Body() dto: SiteVerifyDto) {
-    return this.verifyService.siteVerify(dto);
+  async siteVerify(@Body() body: SiteVerifyDto) {
+    // Không qua ValidationPipe (body là interface -> metatype Object): input sai phải ra 200 success:false,
+    // không phải 400 — xem SiteVerifyDto
+    return this.verifyService.siteVerify(body);
   }
 }

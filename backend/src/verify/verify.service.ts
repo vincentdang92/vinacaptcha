@@ -1,7 +1,8 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service.js';
 import { ReputationService } from '../reputation/reputation.service.js';
-import { VerifyDto, SiteVerifyDto } from './dto/verify.dto.js';
+import { VerifyDto } from './dto/verify.dto.js';
+import type { SiteVerifyDto } from './dto/verify.dto.js';
 import { v4 as uuidv4 } from 'uuid';
 import { DataSource } from 'typeorm';
 import * as crypto from 'crypto';
@@ -120,20 +121,31 @@ export class VerifyService {
     };
   }
 
-  async siteVerify(dto: SiteVerifyDto) {
+  async siteVerify(input: SiteVerifyDto | null | undefined) {
+    // Input thiếu / rỗng / sai kiểu luôn trả 200 success:false, không bao giờ 4xx — xem SiteVerifyDto.
+    // verify_token do người dùng cuối (hoặc bot) kiểm soát: gửi form không kèm token không được biến thành "pass".
+    const secret = typeof input?.secret === 'string' ? input.secret.trim() : '';
+    const verifyToken = typeof input?.verify_token === 'string' ? input.verify_token.trim() : '';
+    if (!secret) {
+      return { success: false, reason: 'missing_secret' };
+    }
+    if (!verifyToken) {
+      return { success: false, reason: 'missing_verify_token' };
+    }
+
     try {
       // 1. Verify site secret from PostgreSQL (hỗ trợ cả full raw key, key_hash, hoặc key_prefix)
-      const secretHash = crypto.createHash('sha256').update(dto.secret || '').digest('hex');
-      const secretPrefix = (dto.secret || '').substring(0, 13);
+      const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+      const secretPrefix = secret.substring(0, 13);
       const apiKeyRes = await this.dataSource.query(`
-        SELECT id, site_id, revoked_at 
-        FROM api_keys 
+        SELECT id, site_id, revoked_at
+        FROM api_keys
         WHERE (key_hash = $1 OR key_prefix = $2 OR key_prefix = $3)
-      `, [secretHash, secretPrefix, dto.secret]);
+      `, [secretHash, secretPrefix, secret]);
 
       let secretSiteId: string;
       if (!apiKeyRes || apiKeyRes.length === 0 || apiKeyRes[0].revoked_at !== null) {
-        if (dto.secret === 'cap_live_6f1a95f9fedee61651fae43c') {
+        if (secret === 'cap_live_6f1a95f9fedee61651fae43c') {
           secretSiteId = '5ae2b566-de1b-4ce2-947a-6f9645eb1004';
         } else {
           return { success: false, reason: 'invalid_secret' };
@@ -143,7 +155,7 @@ export class VerifyService {
       }
 
       // 2. One-time-use check — token chỉ dùng được 1 lần
-      const verifyTokenDataStr = await this.redisService.useOneTimeToken(`verify_token:${dto.verify_token}`);
+      const verifyTokenDataStr = await this.redisService.useOneTimeToken(`verify_token:${verifyToken}`);
       if (!verifyTokenDataStr) {
         return { success: false, reason: 'already_used' };
       }

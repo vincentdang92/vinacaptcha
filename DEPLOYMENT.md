@@ -226,6 +226,10 @@ Nếu dry-run webroot thất bại, dùng cách dừng gateway (mất kết nố
 3. **Quên mật khẩu**: link dạng `https://captcha.example.com/reset-password?token=…`.
 4. **Captcha trên site thật**: nhúng widget theo trang API Docs trong Dashboard, gửi form thử, kiểm tra log trong Dashboard → Nhật ký xác thực.
 5. **Log backend không có lỗi**: `docker compose logs --tail=200 backend | grep -iE "error|fail"`.
+6. **Phân bố mã trạng thái API** (chạy trước deploy với `--since 96h` để có số liệu nền, sau deploy với `--since 30m` để so sánh; `400`/`503` tăng vọt → cân nhắc rollback):
+   ```bash
+   docker compose logs --no-log-prefix --since 30m gateway | grep '"POST /v1/' | awk '{print $7, $9}' | sort | uniq -c
+   ```
 
 ---
 
@@ -279,8 +283,10 @@ Sau khi cập nhật:
 - **`docker/init-db.sql` thay đổi?** Không tự áp dụng vào DB đang chạy — viết và chạy SQL tương ứng bằng `psql` (sau khi đã sao lưu).
 - **Sửa `.env` xong** phải chạy `docker compose up -d` (tạo lại container). `docker compose restart` **không** nạp lại biến môi trường.
 - Bản sửa link kích hoạt (`fix/activation-link`): nếu server đã bật SSL từ trước, làm thêm mục 6.1.
-- Bản vá bảo mật C1–C3 (`fix/critical-captcha-bypass`):
+- Bản vá bảo mật C1–C4 (`fix/critical-captcha-bypass`):
   - `/v1/siteverify` trả **HTTP 503** (thay vì 200 `success: true`) khi hệ thống captcha gặp sự cố — báo trước cho khách hàng kiểm tra code tích hợp xử lý 5xx/timeout theo mẫu trong README/API Docs.
+  - `/v1/siteverify` trả **HTTP 200 `success: false`** (thay vì 400) khi form gửi lên không kèm token — chặn bot vượt captcha trên site khách dùng code mẫu cũ. Người dùng thật có widget lỗi sẽ bị từ chối thay vì lọt qua. Gửi khách code mẫu mới (chỉ cho qua khi 5xx/timeout).
+  - Theo dõi sau deploy: số lượt `/v1/siteverify 400` phải về gần 0 (lệnh đếm mã trạng thái ở mục 7).
   - Server đã bật SSL: không bắt buộc, nhưng nên chạy lại `./ssl.sh <domain> <email>` để `ssl.conf` ghi đè `X-Forwarded-For` như bản mới (gateway gián đoạn vài giây).
   - Kiểm tra sau deploy: Dashboard → Nhật ký xác thực phải hiện IP thật của người truy cập, không phải IP nội bộ `172.x.x.x`.
 
