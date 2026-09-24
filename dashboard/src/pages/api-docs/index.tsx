@@ -1220,19 +1220,15 @@ Content-Type: application/json
   "timestamp": "2026-09-11T11:00:00.000Z"
 }
 
-// Thử nghiệm / Fallback khi hệ thống bận:
-{
-  "success": true,
-  "score": 0,
-  "risk_level": "low",
-  "fallback": true,
-  "warning": "system_busy_trial_fallback"
-}
-
 // Đã dùng / không hợp lệ:
 {
   "success": false,
   "reason": "already_used"
+}
+
+// HTTP 503 — hệ thống captcha gặp sự cố (backend của bạn tự quyết cho qua hay chặn):
+{
+  "error": { "code": "service_unavailable", "message": "..." }
 }`} />
               </Col>
             </Row>
@@ -1313,7 +1309,7 @@ Content-Type: application/json
             <tbody>
               {[
                 ["siteKey", "string", "✅", "Public Site Key (UUID) lấy từ mục Quản lý Sites"],
-                ["forceChallenge", "'auto' | 'slider' | 'pow' | 'none'", "❌", "Mặc định: 'auto'. Đặt 'slider' để ép buộc luôn hiển thị câu đố ghép hình Slider Captcha"],
+                ["forceChallenge", "'auto' | 'slider' | 'pow' | 'none'", "❌", "Mặc định: 'auto'. Đặt 'slider' để ép buộc luôn hiển thị câu đố ghép hình Slider Captcha. Chỉ NÂNG được mức thử thách: nếu hệ thống đã chọn mức cao hơn (VD: 'pow' với IP rủi ro cao) thì giữ nguyên; 'none' không tắt được thử thách."],
                 ["hideBadge", "boolean", "❌", "Mặc định: false. Đặt true để ẩn huy hiệu badge bảo mật ở góc dưới màn hình"],
                 ["baseUrl", "string", "❌", `URL backend, mặc định: ${BASE_URL}`],
                 ["onSuccess", "function(token, score)", "❌", "Callback khi captcha pass, nhận verify_token và risk score"],

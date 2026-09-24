@@ -141,18 +141,16 @@ Máy chủ backend của khách hàng gọi sang NhanHoaCaptcha để đối so�
 - `risk_level`: `"low"` (0–29) | `"medium"` (30–69) | `"high"` (70–100).
 - `verify_token` chỉ dùng được duy nhất 1 lần (One-Time Token trong Redis) — gọi lần 2 sẽ trả về `success: false, reason: "already_used"`.
 
-**Response 200 — Thử nghiệm & Fallback khi máy chủ bận / Timeout**
+**Response 503 — Hệ thống captcha gặp sự cố nội bộ (DB/Redis quá tải, mất kết nối)**
 ```json
 {
-  "success": true,
-  "score": 0,
-  "risk_level": "low",
-  "fallback": true,
-  "warning": "system_busy_trial_fallback",
-  "timestamp": "2026-09-11T11:00:00.000Z",
-  "hostname": "unknown"
+  "error": {
+    "code": "service_unavailable",
+    "message": "Hệ thống xác thực tạm thời không khả dụng, vui lòng thử lại sau."
+  }
 }
 ```
+- Server **không bao giờ** trả `success: true` khi không kiểm tra được token (fail-closed). Trước đây server trả 200 `success: true, fallback: true` — kẻ tấn công có thể chủ động làm quá tải để mọi token bịa đều qua. Việc cho qua hay chặn khi gặp 5xx/timeout do backend của khách quyết định (xem khuyến nghị bên dưới).
 
 **Response — Thất bại**
 ```json

@@ -5,6 +5,9 @@ import { RedisService } from '../redis/redis.service.js';
 import { RiskEngineService } from '../risk-engine/risk-engine.service.js';
 import { DataSource } from 'typeorm';
 
+// Thứ tự độ khó theo đúng cách risk engine leo thang: an toàn -> none, nghi ngờ -> slider, nguy cơ cao -> pow
+const CHALLENGE_STRENGTH = { none: 0, slider: 1, pow: 2 } as const;
+
 @Injectable()
 export class IssueService {
   constructor(
@@ -218,10 +221,16 @@ export class IssueService {
       effectivePowDifficulty = riskEval.powDifficulty;
     }
 
-    // Cho phép force_challenge ghi đè khi client yêu cầu (VD: màn hình login / register / testing)
-    if (dto.force_challenge) {
-      effectiveChallengeType = dto.force_challenge;
-      effectivePowDifficulty = dto.force_challenge === 'pow' ? (riskEval.powDifficulty || 12) : null;
+    // force_challenge chỉ được NÂNG mức thử thách (VD: màn hình login luôn muốn slider), không bao giờ hạ
+    // thấp hơn mức site / risk engine đã chọn: giá trị này do client tự gửi, nếu cho phép hạ thì bot chỉ cần
+    // gửi 'none' là nhận verify_token mà không phải giải gì.
+    const requestedChallenge = dto.force_challenge;
+    if (
+      (requestedChallenge === 'slider' || requestedChallenge === 'pow') &&
+      CHALLENGE_STRENGTH[requestedChallenge] > CHALLENGE_STRENGTH[effectiveChallengeType]
+    ) {
+      effectiveChallengeType = requestedChallenge;
+      effectivePowDifficulty = requestedChallenge === 'pow' ? (riskEval.powDifficulty || 12) : null;
     }
 
     // 3. Generate session ID and store in Redis (One-Time Token kèm thông tin phiên)

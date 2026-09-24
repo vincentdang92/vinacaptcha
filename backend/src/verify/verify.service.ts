@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service.js';
 import { ReputationService } from '../reputation/reputation.service.js';
 import { VerifyDto, SiteVerifyDto } from './dto/verify.dto.js';
@@ -36,7 +36,7 @@ export class VerifyService {
     }
     const sessionData = JSON.parse(sessionDataStr);
     const siteId = sessionData.siteId;
-    const challengeType: 'none' | 'slider' | 'pow' = sessionData.challengeType || 'none';
+    const challengeType: 'none' | 'slider' | 'pow' = sessionData.challengeType;
     const riskScore = sessionData.riskScore || 0;
     const breakdown = sessionData.breakdown || {};
 
@@ -76,6 +76,10 @@ export class VerifyService {
           reason = 'slider_speed_abnormal';
         }
       }
+    } else if (challengeType !== 'none') {
+      // Chỉ pass không cần giải khi chính server đã chọn 'none'; loại lạ (session hỏng / dữ liệu cũ) phải fail
+      passed = false;
+      reason = 'unknown_challenge_type';
     }
 
     const resultEnum = passed ? 'pass' : 'fail';
@@ -169,17 +173,23 @@ export class VerifyService {
         timestamp: new Date().toISOString(),
         hostname,
       };
-    } catch (err) {
-      console.error('[VerifyService] siteVerify internal error, activating trial fallback success:', err);
-      return {
-        success: true,
-        score: 0,
-        risk_level: 'low',
-        fallback: true,
-        warning: 'system_busy_trial_fallback',
-        timestamp: new Date().toISOString(),
-        hostname: 'unknown',
-      };
+    } catch (err: any) {
+      // Fail-closed: lỗi DB/Redis KHÔNG được biến thành success:true — kẻ tấn công có thể chủ động làm quá tải
+      // hệ thống để mọi token bịa đều qua. Trả 503 để backend khách tự quyết (API_CONTRACT mục 1.3).
+      // Chỉ log mã/nội dung lỗi, không log nguyên object vì có thể chứa tham số query (secret).
+      console.error(JSON.stringify({
+        level: 'error',
+        context: 'VerifyService',
+        msg: 'siteverify_internal_error',
+        code: err?.code,
+        error: err?.message,
+      }));
+      throw new ServiceUnavailableException({
+        error: {
+          code: 'service_unavailable',
+          message: 'Hệ thống xác thực tạm thời không khả dụng, vui lòng thử lại sau.',
+        },
+      });
     }
   }
 }
